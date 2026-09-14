@@ -123,10 +123,31 @@ def divergence(
     t = np.arange(len(cumulative)) * dt_ms
     # All five chambers are plotted. The reference is the operator, which is
     # never heated, so no chamber has to be dropped from the plot.
+    #
+    # Chambers that never separated sit exactly on zero and overlap each other
+    # invisibly, so a plain legend claims five distinguishable lines where the
+    # eye can find one. Label the flat ones as a single entry and say so.
+    # Threshold relative to the largest mover, not against zero. A chamber that
+    # reached a cumulative distance of 1 while another reached 12,500 is flat
+    # on this plot whatever the strict inequality says.
+    peak = max(
+        (cumulative[:, c].max() for c in CHAMBERS if c != reference), default=0
+    )
+    cutoff = max(1.0, peak * 0.01)
+
+    flat, moved = [], []
     for c in CHAMBERS:
         if c == reference:
             continue
-        ax.plot(t, cumulative[:, c], lw=0.9, label=f"chamber {c}")
+        (moved if cumulative[:, c].max() >= cutoff else flat).append(c)
+
+    for c in moved:
+        ax.plot(t, cumulative[:, c], lw=1.1, label=f"chamber {c}")
+    for i, c in enumerate(flat):
+        ax.plot(
+            t, cumulative[:, c], lw=0.9, color="#5a5a5a",
+            label=("unchanged: " + ", ".join(str(x) for x in flat)) if i == 0 else None,
+        )
 
     ax.set_xlabel("ms", color="#888888", fontsize=8)
     ref_label = "operator" if reference == OPERATOR else f"chamber {reference}"
