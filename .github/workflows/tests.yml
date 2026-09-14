@@ -1,0 +1,19 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  fast:
+    # The connectome is 1.1GB and is not fetched in CI, so the gates that need
+    # it are skipped here and run locally. These are the ones that do not.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install numpy scipy pyarrow pandas matplotlib pytest
+      - run: python -m pytest tests/ -q -m "not slow"
