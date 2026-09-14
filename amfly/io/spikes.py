@@ -35,6 +35,7 @@ class Recorder:
     rates: list = field(default_factory=list, init=False)
     heat_levels: list = field(default_factory=list, init=False)
     dial: list = field(default_factory=list, init=False)
+    hamming: list = field(default_factory=list, init=False)
     _subset_events: list = field(default_factory=list, init=False)
 
     @classmethod
@@ -59,8 +60,11 @@ class Recorder:
         spikes: np.ndarray,
         heat: np.ndarray,
         dial_position: int,
+        hamming: np.ndarray | None = None,
     ) -> None:
         self.rates.append(spikes.sum(axis=0).astype(np.int32))
+        if hamming is not None:
+            self.hamming.append(np.asarray(hamming, dtype=np.int32))
         self.heat_levels.append(heat.astype(np.float32))
         self.dial.append(dial_position)
 
@@ -93,6 +97,9 @@ class Recorder:
             rates=np.array(self.rates, dtype=np.int32),
             heat=np.array(self.heat_levels, dtype=np.float32),
             dial=np.array(self.dial, dtype=np.int8),
+            hamming=np.array(self.hamming, dtype=np.int32)
+            if self.hamming
+            else np.zeros((0, self.n_instances), dtype=np.int32),
             subset=self.subset.astype(np.int32),
             events_step=ev[0],
             events_neuron=ev[1],

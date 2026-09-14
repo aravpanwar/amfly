@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from amfly.config import CHAMBERS, LIF, OPERATOR  # noqa: E402
 from amfly.data.loader import load, verify_counts  # noqa: E402
 from amfly.io.spikes import Recorder  # noqa: E402
+from amfly.sim.divergence import Divergence  # noqa: E402
 from amfly.sim.engine import Engine, State  # noqa: E402
 from amfly.wiring.chambers import Heat  # noqa: E402
 from amfly.wiring.operator import Dial  # noqa: E402
@@ -41,6 +42,10 @@ def main() -> int:
     ap.add_argument("--baseline-mv", type=float, default=6.0,
                     help="identical drive to all six, keeps the network alive")
     ap.add_argument("--dial-window-ms", type=float, default=50.0)
+    ap.add_argument("--pulse-period-ms", type=float, default=10.0,
+                    help="phasic drive period; tonic drive synchronises the "
+                         "network and suppresses divergence")
+    ap.add_argument("--pulse-width-ms", type=float, default=0.5)
     ap.add_argument("--no-verify", action="store_true")
     args = ap.parse_args()
 
@@ -63,15 +68,31 @@ def main() -> int:
     dial = Dial.build(dn, lif.dt_ms, window_ms=args.dial_window_ms)
     heat = Heat(th, c.n, 6)
     rec = Recorder.build(c.n, 6, dn, th)
+    div = Divergence()
+
+    # Phasic drive into a strided slice of the central-brain sensory neurons.
+    # Driving the 25 thermoreceptors tonically made the whole network ring at
+    # the drive rate, and a globally synchronised network swamps perturbations.
+    # See docs/negative-results.md.
+    sensory = np.flatnonzero(
+        np.char.startswith(c.superclass.astype(str), "cb_sensory")
+    )
+    drive = sensory[::7]
+    period = max(1, int(round(args.pulse_period_ms / lif.dt_ms)))
+    width = max(1, int(round(args.pulse_width_ms / lif.dt_ms)))
+    log.info("phasic drive: %d neurons, %d-step pulse every %d steps",
+             len(drive), width, period)
 
     log.info("running %d steps (%.1f ms simulated)", steps, args.ms)
     t0 = time.time()
     for t in range(steps):
         inj = heat.injection(dial.position)
-        inj[th, :] += np.float32(args.baseline_mv)
+        if t % period < width:
+            inj[drive, :] += np.float32(args.baseline_mv)
         spikes = eng.step(st, inj)
         pos = dial.update(spikes, t)
-        rec.record(t, spikes, heat.levels, pos)
+        ham = div.update(spikes, t)
+        rec.record(t, spikes, heat.levels, pos, ham)
 
         if t % 100 == 0 and t:
             el = time.time() - t0
@@ -83,13 +104,15 @@ def main() -> int:
     elapsed = time.time() - t0
     log.info("done in %.1fs (%.0f ms/step)", elapsed, elapsed / steps * 1000)
 
-    rates = np.array(rec.rates)
-    chambers = rates[:, list(CHAMBERS)]
-    identical = all(
-        np.array_equal(chambers[:, 0], chambers[:, i]) for i in range(1, 5)
-    )
     log.info("dial switches: %d", len(dial.history))
-    log.info("chambers still identical: %s", identical)
+    if div.first_divergence:
+        for i in sorted(div.first_divergence):
+            log.info("  instance %d diverged at step %d",
+                     i, div.first_divergence[i])
+    else:
+        log.info("  no instance diverged; this is a negative result, record it")
+    log.info("final cumulative distance: %s", div.cumulative()[-1])
+    identical = not div.first_divergence
     if identical and len(dial.history) == 0:
         log.warning(
             "no dial movement yet: latency is %.0f ms, so run at least that long",
@@ -104,6 +127,7 @@ def main() -> int:
                 "steps": steps,
                 "ms": args.ms,
                 "dial_switches": len(dial.history),
+                "first_divergence": div.first_divergence,
                 "dial_history": dial.history,
                 "seconds": round(elapsed, 1),
             },
