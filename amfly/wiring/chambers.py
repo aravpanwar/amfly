@@ -32,7 +32,10 @@ class Heat:
     n_neurons: int
     n_instances: int
     amplitude_mv: float = 8.0
-    ramp_steps: int = 2000  # 200ms at dt=0.1ms
+    # 20ms at dt=0.1ms. Was 200ms, which is longer than a short run, so the
+    # stimulus spent the whole window ramping and never actually arrived.
+    # See docs/negative-results.md.
+    ramp_steps: int = 200
 
     def __post_init__(self) -> None:
         if len(self.target_indices) == 0:
