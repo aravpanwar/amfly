@@ -103,25 +103,34 @@ def six_traces(
     return fig
 
 
-def divergence(rates: np.ndarray, dt_ms: float = 0.1) -> plt.Figure:
+def divergence(
+    cumulative: np.ndarray, dt_ms: float = 0.1, reference: int = 0
+) -> plt.Figure:
     """When the chambers stop being the same program.
 
-    Plots each chamber's cumulative absolute difference from chamber 0. Flat at
-    zero means still identical. The moment a line lifts is the moment that
-    chamber stopped being interchangeable.
+    Takes cumulative spike-identity distance from amfly.sim.divergence, not a
+    rate difference. Rate hides the thing entirely: the first run diverged in
+    which neurons fired while totals stayed identical. See
+    docs/negative-results.md.
+
+    Flat at zero means still the same program. The moment a line lifts is the
+    moment that chamber stopped being interchangeable, and it never returns.
     """
     fig, ax = plt.subplots(figsize=(10, 3.2))
     fig.patch.set_facecolor(BG)
     _style(ax)
 
-    t = np.arange(len(rates)) * dt_ms
-    ref = rates[:, 0].astype(np.int64)
-    for c in CHAMBERS[1:]:
-        d = np.cumsum(np.abs(rates[:, c].astype(np.int64) - ref))
-        ax.plot(t, d, lw=0.9, label=f"chamber {c}")
+    t = np.arange(len(cumulative)) * dt_ms
+    for c in CHAMBERS:
+        if c == reference:
+            continue
+        ax.plot(t, cumulative[:, c], lw=0.9, label=f"chamber {c}")
 
     ax.set_xlabel("ms", color="#888888", fontsize=8)
-    ax.set_ylabel("cumulative |diff| from chamber 0", color="#999999", fontsize=8)
+    ax.set_ylabel(
+        f"cumulative spike-identity distance\nfrom chamber {reference}",
+        color="#999999", fontsize=8,
+    )
     leg = ax.legend(frameon=False, fontsize=7, ncol=4)
     for txt in leg.get_texts():
         txt.set_color("#999999")
