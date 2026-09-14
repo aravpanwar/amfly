@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from amfly.config import CHAMBERS, LIF, OPERATOR  # noqa: E402
 from amfly.data.loader import load, verify_counts  # noqa: E402
 from amfly.io.spikes import Recorder  # noqa: E402
+from amfly.sim.backend import describe  # noqa: E402
 from amfly.sim.divergence import Divergence  # noqa: E402
 from amfly.sim.engine import Engine, State  # noqa: E402
 from amfly.wiring.chambers import Heat  # noqa: E402
@@ -130,6 +131,7 @@ def main() -> int:
                 "first_divergence": div.first_divergence,
                 "dial_history": dial.history,
                 "seconds": round(elapsed, 1),
+                "backend": describe(),
             },
             indent=2,
         )
