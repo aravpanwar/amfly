@@ -37,17 +37,19 @@ class Divergence:
     first_divergence: dict = field(default_factory=dict, init=False)
 
     def update(self, spikes: np.ndarray, step: int) -> np.ndarray:
-        """spikes: (N, n_instances) bool. Returns (n_instances,) distance."""
-        ref = spikes[:, self.reference]
-        d = np.empty(self.n_instances, dtype=np.int32)
-        for i in range(self.n_instances):
-            if i == self.reference:
-                d[i] = 0
-                continue
-            n = int(np.count_nonzero(spikes[:, i] ^ ref))
-            d[i] = n
-            if n and i not in self.first_divergence:
-                self.first_divergence[i] = step
+        """spikes: (N, n_instances) bool. Returns (n_instances,) distance.
+
+        One vectorised XOR over the whole matrix. The per-instance Python loop
+        this replaces cost more per step than the LIF update itself.
+        """
+        ref = spikes[:, self.reference : self.reference + 1]
+        d = np.count_nonzero(spikes ^ ref, axis=0).astype(np.int32)
+        d[self.reference] = 0
+
+        for i in np.flatnonzero(d):
+            if i not in self.first_divergence:
+                self.first_divergence[int(i)] = step
+
         self.per_step.append(d)
         return d
 
