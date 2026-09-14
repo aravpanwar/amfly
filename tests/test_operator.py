@@ -37,6 +37,7 @@ def test_dial_reads_only_the_operator_column():
 
 def test_dial_points_at_the_most_active_block():
     d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
+    d.dwell_steps = 1
     # DN indices 60..79 are block 3 of 5 over 0..99.
     s = _spikes(np.arange(60, 80))
     for t in range(d.latency_steps + 10):
@@ -47,6 +48,7 @@ def test_dial_points_at_the_most_active_block():
 def test_dial_is_deterministic_across_runs():
     def run():
         d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
+        d.dwell_steps = 1
         s = _spikes(np.arange(20, 40))
         out = [d.update(s, t) for t in range(d.latency_steps + 50)]
         return out, d.history
@@ -60,6 +62,7 @@ def test_dial_is_deterministic_across_runs():
 def test_ties_break_to_lowest_index():
     """No RNG, and no arbitrary choice: equal blocks resolve to the lowest."""
     d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
+    d.dwell_steps = 1
     s = np.zeros((N, 6), dtype=bool)  # all blocks equally silent
     for t in range(d.latency_steps + 10):
         d.update(s, t)
@@ -69,6 +72,7 @@ def test_ties_break_to_lowest_index():
 def test_dial_latency_delays_the_change():
     """The change must not land before the latency has elapsed."""
     d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
+    d.dwell_steps = 1
     s = _spikes(np.arange(80, 100))  # block 4
     for t in range(d.latency_steps - 2):
         assert d.update(s, t) == 0, "dial moved before the latency elapsed"
@@ -129,6 +133,7 @@ def test_dial_reaches_a_quiet_block_when_it_becomes_unusually_active():
     """
     d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
     d.latency_steps = 5
+    d.dwell_steps = 10  # real default is 3000; shortened to fit the window
 
     loud = np.arange(0, 20)    # block 0
     quiet = np.arange(60, 80)  # block 3
@@ -157,6 +162,7 @@ def test_normalised_readout_is_still_deterministic():
     def run():
         d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
         d.latency_steps = 5
+        d.dwell_steps = 10
         out = []
         for t in range(300):
             s = _spikes(np.arange(20, 40) if t % 50 < 25 else np.arange(60, 80))
@@ -164,3 +170,54 @@ def test_normalised_readout_is_still_deterministic():
         return out
 
     assert run() == run()
+
+
+def test_dial_holds_a_choice_for_the_dwell_period():
+    """The fix for the chatter.
+
+    Run r003 produced 725 switches with a median hold of 4 steps, because a
+    fresh decision was computed every step and the latency only delayed the
+    stream rather than pacing it. A committed choice must now stand.
+    """
+    d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
+    d.latency_steps = 5
+    d.dwell_steps = 200
+
+    # Alternate the dominant block every single step, the worst case for chatter.
+    a, b = np.arange(0, 20), np.arange(80, 100)
+    positions = []
+    for t in range(1200):
+        positions.append(d.update(_spikes(a if t % 2 else b), t))
+
+    changes = sum(
+        1 for i in range(1, len(positions)) if positions[i] != positions[i - 1]
+    )
+    assert changes <= 1200 // d.dwell_steps + 2, (
+        f"{changes} changes in 1200 steps with dwell={d.dwell_steps}; "
+        "the dial is still chattering"
+    )
+
+
+def test_dwell_default_is_long_enough_for_heat_to_register():
+    """Dwell must exceed the heat ramp, or a selection cannot leave a mark."""
+    from amfly.wiring.chambers import Heat
+
+    d = Dial.build(DN, dt_ms=0.1, window_ms=50.0)
+    ramp = Heat(np.arange(5), 100, 6).ramp_steps
+    assert d.dwell_steps > ramp, (
+        f"dwell {d.dwell_steps} is shorter than the heat ramp {ramp}, so a "
+        "chamber would be deselected before it is fully heated"
+    )
+
+
+def test_queued_switch_still_lands_during_dwell():
+    """Dwell gates new decisions only; a queued one must not be stranded."""
+    d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
+    d.latency_steps = 50
+    d.dwell_steps = 500
+
+    s = _spikes(np.arange(80, 100))  # block 4
+    final = 0
+    for t in range(400):
+        final = d.update(s, t)
+    assert final == 4, "the queued switch never landed while dwell was active"

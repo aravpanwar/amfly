@@ -55,11 +55,18 @@ class Dial:
     _baseline_decay: float = 0.999
     _baseline_floor: float = 1.0
 
+    # Minimum steps a committed choice stands before another can be made.
+    # 300ms at dt=0.1ms: long enough for heat to ramp and register, and long
+    # enough that a viewer can follow one decision at a time.
+    dwell_steps: int = 3000
+
     def __post_init__(self) -> None:
         # Contiguous blocks over the DNs, already in sorted bodyId order.
         self._blocks = np.array_split(self.dn_indices, self.n_blocks)
         self._counts = np.zeros((self.window_steps, self.n_blocks), dtype=np.int32)
         self._baseline = np.zeros(self.n_blocks, dtype=np.float64)
+        self._last_commit = -10**9
+        self._pending_target = None
 
     @classmethod
     def build(cls, dn_indices, dt_ms: float, window_ms: float = 50.0) -> "Dial":
@@ -107,8 +114,24 @@ class Dial:
         # argmax breaks ties to the lowest index, deterministically.
         target = int(np.argmax(relative))
 
-        # Commit the decision to fire `latency_steps` from now.
-        self._pending.append((step + self.latency_steps, target))
+        # Minimum dwell. Without it the dial re-decides every step and the
+        # latency only delays the chatter rather than pacing it: run r003
+        # produced 725 switches with a median hold of 4 steps, so no chamber
+        # except the first was heated long enough to leave a mark.
+        # See docs/negative-results.md.
+        #
+        # Latency is "how long before a decision takes effect". Dwell is "how
+        # long a decision stands once made". The piece needs both.
+        # Dwell gates only whether a NEW decision may be made. Decisions
+        # already queued must still be allowed to land, otherwise a pending
+        # switch is stranded in the queue forever.
+        if (
+            step - self._last_commit >= self.dwell_steps
+            and target != self._pending_target
+        ):
+            self._pending_target = target
+            self._pending.append((step + self.latency_steps, target))
+            self._last_commit = step
 
         while self._pending and self._pending[0][0] <= step:
             _, pos = self._pending.pop(0)
