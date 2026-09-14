@@ -168,3 +168,42 @@ structural guarantee, and only the second is safe to build a measurement on.
 Worth stating plainly: the piece was not broken. The measurement was. But the
 run reported "the operator diverged", which is exactly the claim the piece
 must not make falsely, and it would have been rendered into a clip.
+
+## 2026-09-14: the dial chatters, and the latency does not pace it
+
+**Run:** r003, 3000ms, 30,000 steps, authored 500ms dial latency, GPU.
+
+**What it reported:** 725 dial switches. Every chamber heated to the full 8.0mV.
+All five diverged. The operator at exactly 0.
+
+**What actually happened:** the median dial hold is **4 steps**, and 688 of the
+725 holds are shorter than 100 steps (10ms). Sampling the log every 100 steps
+showed a handful of slow, deliberate-looking switches; that was an aliasing
+artefact. Underneath, the dial re-decides roughly ten thousand times a second.
+
+**The latency is not a pacing mechanism.** `DIAL_LATENCY_MS` delays when a
+decision takes effect, but a fresh decision is computed every step and queued.
+The result is a 500ms-delayed copy of a stream that changes every 0.1ms, not a
+dial that holds a position for 500ms. I had assumed the latency implied
+hysteresis. It does not.
+
+**Consequences, all visible in the numbers:**
+
+- Cumulative distance: chamber 0 reached 43,548,286 while chambers 1, 2, 3 and 4
+  reached 1,313, 1,185, 1,560 and 1,465. Chamber 0 is the only one heated
+  continuously, from step 18 before the dial began moving. Every other chamber
+  is heated in 4-step slivers that leave almost nothing behind.
+- Chamber 3 was reported as re-converging at step 29,727. That is not a finding
+  about the connectome, it is the chatter.
+- Peak heat reaching 8.0mV in every chamber is misleading: the ramp climbs while
+  a chamber is selected and decays when it is not, so rapid switching lets all
+  five touch the ceiling without any of them being meaningfully heated.
+
+**What this does not affect:** the operator still sits at exactly 0, so
+isolation holds. Divergence onsets are still real. The simulation is correct;
+the control signal on top of it is not doing what the piece needs.
+
+**Fix:** the dial needs hysteresis, a minimum dwell time once it commits to a
+chamber, so a decision persists long enough for the heat to matter and for a
+viewer to read the causality. Latency and dwell are different properties and the
+piece needs both.
