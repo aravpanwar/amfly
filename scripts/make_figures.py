@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from amfly.config import CHAMBERS, LIF, OPERATOR  # noqa: E402
 from amfly.io.spikes import load_run  # noqa: E402
-from amfly.sim.analysis import analyse, unheated_stayed_identical  # noqa: E402
+from amfly.sim.analysis import analyse  # noqa: E402
 from amfly.viz import traces  # noqa: E402
 
 REFERENCE = OPERATOR  # never heated; see amfly/sim/divergence.py

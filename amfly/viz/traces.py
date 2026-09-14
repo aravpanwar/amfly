@@ -104,7 +104,7 @@ def six_traces(
 
 
 def divergence(
-    cumulative: np.ndarray, dt_ms: float = 0.1, reference: int = 0
+    cumulative: np.ndarray, dt_ms: float = 0.1, reference: int = OPERATOR
 ) -> plt.Figure:
     """When the chambers stop being the same program.
 
@@ -121,14 +121,17 @@ def divergence(
     _style(ax)
 
     t = np.arange(len(cumulative)) * dt_ms
+    # All five chambers are plotted. The reference is the operator, which is
+    # never heated, so no chamber has to be dropped from the plot.
     for c in CHAMBERS:
         if c == reference:
             continue
         ax.plot(t, cumulative[:, c], lw=0.9, label=f"chamber {c}")
 
     ax.set_xlabel("ms", color="#888888", fontsize=8)
+    ref_label = "operator" if reference == OPERATOR else f"chamber {reference}"
     ax.set_ylabel(
-        f"cumulative spike-identity distance\nfrom chamber {reference}",
+        f"cumulative spike-identity distance\nfrom the {ref_label}",
         color="#999999", fontsize=8,
     )
     leg = ax.legend(frameon=False, fontsize=7, ncol=4)
