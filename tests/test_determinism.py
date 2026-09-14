@@ -163,3 +163,52 @@ def test_float_addition_is_not_associative():
     for v in vals[::-1]:
         backward += v
     assert forward != backward
+
+
+# --------------------------------------------------------------------------
+# Synaptic delay. The ring buffer is easy to get off by one, and an error
+# here would change every timing number in the project without failing
+# anything else.
+# --------------------------------------------------------------------------
+
+def test_synaptic_delay_is_exactly_delay_steps():
+    """A spike at t arrives at t + delay_steps, not t+1 and not t+delay-1."""
+    lif = LIF()
+    n = 2
+    # neuron 0 -> neuron 1, 100 synapses.
+    m = sp.csr_matrix(np.array([[0, 0], [100, 0]], dtype=np.float32))
+    eng = Engine(m, lif, n_instances=1)
+    st = State.initial(n, lif, 1)
+
+    arrival = None
+    for t in range(lif.delay_steps + 10):
+        inj = np.zeros((n, 1), dtype=np.float32)
+        if t == 0:
+            inj[0, 0] = 100.0  # force neuron 0 to spike at t=0
+        eng.step(st, inj)
+        if st.g[1, 0] > 0 and arrival is None:
+            arrival = t
+
+    assert arrival == lif.delay_steps, (
+        f"current arrived at step {arrival}, expected {lif.delay_steps} "
+        f"({lif.delay_ms}ms at dt={lif.dt_ms}ms)"
+    )
+
+
+def test_delay_buffer_does_not_leak_between_instances():
+    """The ring buffer is shared storage; a slot must stay per-instance."""
+    lif = LIF()
+    n = 2
+    m = sp.csr_matrix(np.array([[0, 0], [100, 0]], dtype=np.float32))
+    eng = Engine(m, lif, n_instances=6)
+    st = State.initial(n, lif, 6)
+
+    for t in range(lif.delay_steps + 5):
+        inj = np.zeros((n, 6), dtype=np.float32)
+        if t == 0:
+            inj[0, 2] = 100.0  # only instance 2 spikes
+        eng.step(st, inj)
+
+    assert st.g[1, 2] > 0, "instance 2 should have received current"
+    for i in (0, 1, 3, 4, 5):
+        assert st.g[1, i] == 0, f"instance {i} received current it never sent"
