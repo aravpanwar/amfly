@@ -54,6 +54,13 @@ def main() -> int:
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--cpu", action="store_true",
                     help="force the numpy reference backend even if CUDA works")
+    ap.add_argument("--silence-unclear-nt", action="store_true",
+                    help="sensitivity run: silence the 3,177 neurons (1.9%%) "
+                         "whose neurotransmitter is unclear or missing, rather "
+                         "than defaulting them to excitatory")
+    ap.add_argument("--weight-threshold", type=int, default=1,
+                    help="minimum synapse count per connection. 1 keeps all "
+                         "25,582,938 edges; anything higher must be declared")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -61,8 +68,20 @@ def main() -> int:
     lif = LIF()
     steps = int(round(args.ms / lif.dt_ms))
 
-    c = load(args.data)
-    if not args.no_verify:
+    c = load(
+        args.data,
+        weight_threshold=args.weight_threshold,
+        silence_unclear_nt=args.silence_unclear_nt,
+    )
+    if args.no_verify:
+        pass
+    elif args.weight_threshold > 1:
+        log.warning(
+            "weight threshold %d is set, so the published counts do not apply "
+            "and the count gate is skipped. Declare this in any result.",
+            args.weight_threshold,
+        )
+    else:
         verify_counts(c)
         log.info("counts verified")
 
