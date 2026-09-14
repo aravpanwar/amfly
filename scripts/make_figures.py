@@ -25,7 +25,7 @@ from amfly.io.spikes import load_run  # noqa: E402
 from amfly.sim.analysis import analyse, unheated_stayed_identical  # noqa: E402
 from amfly.viz import traces  # noqa: E402
 
-REFERENCE = CHAMBERS[1]  # an unheated chamber; see amfly/sim/divergence.py
+REFERENCE = OPERATOR  # never heated; see amfly/sim/divergence.py
 
 log = logging.getLogger("amfly.figures")
 

@@ -126,3 +126,45 @@ spikes, still no RNG, and the rule is still one paragraph to read.
 The 700ms run in flight at the time was killed at step 2900 of 7000, about 11
 minutes in, because it was using the old readout and would have produced a clip
 in which three of the five chambers were never heated.
+
+## 2026-09-14: the operator appeared to diverge, and had not
+
+**Run:** r002, 300ms, 3000 steps, dial latency shortened to 40ms so switches
+were visible. 23 dial switches, all five chambers heated.
+
+**What the run reported:**
+
+```
+instance 0 diverged at step 18
+instance 2 diverged at step 426
+instance 3 diverged at step 458
+instance 4 diverged at step 495
+instance 5 diverged at step 1502    <- the operator
+```
+
+Instance 5 is the operator. It is never heated, and `Heat.injection()` provably
+never writes its column: verified directly, its maximum heat over the whole run
+is exactly 0.0.
+
+**Cause: the divergence reference was itself being heated.** The reference was
+`CHAMBERS[1]`, chosen earlier precisely because it was unheated. That was true
+while the dial sat still. Once the dial moved, chamber 1 was selected at step
+435 and started being heated, so every subsequent "distance from the reference"
+was distance from a moving target. The operator looked like it diverged because
+the thing it was being compared against had changed.
+
+Note instance 2 diverged at 426, slightly before 435, so that one is its own
+genuine heating. Everything after 435 is contaminated.
+
+**Fix:** the reference is now the operator, which is the only instance
+structurally guaranteed never to be heated. Chambers are all heatable by
+definition, so no chamber can serve as a stable reference in a run where the
+dial moves.
+
+**Retained lesson:** "currently unheated" is not the same property as "cannot be
+heated". The first was an observation about one run and the second is a
+structural guarantee, and only the second is safe to build a measurement on.
+
+Worth stating plainly: the piece was not broken. The measurement was. But the
+run reported "the operator diverged", which is exactly the claim the piece
+must not make falsely, and it would have been rendered into a clip.

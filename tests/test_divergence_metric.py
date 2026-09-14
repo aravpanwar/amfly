@@ -83,3 +83,36 @@ def test_unheated_instances_stay_at_zero_together():
     assert out[0] == 0
     assert out[1] == 0 and out[2] == 0 and out[4] == 0 and out[5] == 0
     assert out[3] == 1
+
+
+def test_default_reference_is_the_operator():
+    """The reference must be an instance that is never heated.
+
+    Any chamber can be heated once the dial moves, and a heated reference makes
+    every distance meaningless: it becomes distance from a moving target. In
+    run r002 the reference chamber was heated at step 435 and the operator,
+    which is never heated at all, appeared to diverge at step 1502.
+    """
+    from amfly.config import OPERATOR
+
+    assert Divergence().reference == OPERATOR
+
+
+def test_heated_reference_makes_unheated_instances_look_divergent():
+    """Documents the failure directly, so the reasoning is not lost.
+
+    Two instances that are identical to each other still show a nonzero
+    distance when the reference they are measured against changes.
+    """
+    ref_changed = np.zeros((10, 6), dtype=bool)
+    ref_changed[[1, 2, 3]] = True
+    ref_changed[5, 2] = True  # the reference column alone moves
+
+    d = Divergence(reference=2)
+    out = d.update(ref_changed, 0)
+
+    # Instances 0 and 1 are identical to each other, yet both read nonzero
+    # purely because the reference moved.
+    assert np.array_equal(ref_changed[:, 0], ref_changed[:, 1])
+    assert out[0] > 0 and out[1] > 0
+    assert out[0] == out[1]

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..config import CHAMBERS
+from ..config import CHAMBERS, OPERATOR
 
 
 @dataclass
@@ -31,10 +31,16 @@ class Divergence:
     are not.
     """
 
-    # An UNHEATED chamber, so the heated one stands out alone. Referencing the
-    # heated chamber makes every other instance show the same large distance
-    # and the plot reads as five chambers diverging rather than one.
-    reference: int = CHAMBERS[1]
+    # The OPERATOR, because it is the only instance structurally guaranteed
+    # never to be heated: Heat.injection() never writes its column.
+    #
+    # Using a chamber as the reference is wrong as soon as the dial moves. It
+    # was CHAMBERS[1], and in run r002 the dial selected chamber 1 at step 435,
+    # so the reference itself started being heated and "distance from the
+    # reference" became distance from a moving target. That made the operator
+    # appear to diverge at step 1502 despite never being heated at all.
+    # See docs/negative-results.md.
+    reference: int = OPERATOR
     n_instances: int = 6
     per_step: list = field(default_factory=list, init=False)
     first_divergence: dict = field(default_factory=dict, init=False)
