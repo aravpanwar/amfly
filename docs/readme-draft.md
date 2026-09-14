@@ -73,7 +73,9 @@ is the connection count, not the synapse count.
   and default to excitatory. Run `--silence-unclear-nt` to silence them instead
   and see how much the result depends on that choice.
 - **Bit-identity is guaranteed within one machine and configuration.** Identical
-  results across different GPUs are not promised.
+  results across different GPUs are not promised. On this machine the CUDA and
+  numpy backends happen to agree byte for byte, which is observed rather than
+  relied upon.
 
 ### Negative results
 
