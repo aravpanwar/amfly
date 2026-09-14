@@ -65,3 +65,44 @@ the problem.
 the natural thing to reach for and it quietly destroys the phenomenon, because
 every perturbation is overwritten by the next drive cycle before it can
 propagate. Phasic drive leaves the network free to carry a difference forward.
+
+## 2026-09-14: the dial reaches only two of five chambers
+
+**Test:** replayed 300 steps of real operator descending-neuron activity (6,500
+DN spike events across 1,035 distinct DNs) through the dial readout.
+
+**What works:** the dial moves. 17 switches over the window, so the readout is
+responsive to real spiking rather than sitting stuck.
+
+**What does not:** it visited only chambers 0 and 1. Block spike totals at the
+end of the window were `[228, 231, 150, 152, 184]`. Blocks 0 and 1 are
+persistently more active than the rest, so an argmax over raw counts almost
+never selects blocks 2, 3 or 4.
+
+Three of the five chambers would never be heated. The piece is five chambers and
+one operator; a dial that can only reach two of them is not the piece.
+
+**Why it happens:** the blocks are contiguous slices of sorted bodyId, and DN
+firing rates are not uniform across that ordering. Splitting 1,314 DNs into five
+equal-sized blocks equalises *neuron count*, not *activity*. Nothing forces the
+five blocks to be comparably active, and measurably they are not.
+
+**Note the partition itself is fine.** Measured, the blocks hold 263/263/263/
+263/262 DNs spanning 181/183/142/81/180 distinct DN types, so no block is a
+single functional group and the mapping carries no anatomical claim. The problem
+is purely that raw argmax over unequal baselines has a fixed winner.
+
+**Options, none of them chosen yet:**
+
+1. Normalise each block by its own running baseline, so the dial responds to
+   which block is *unusually* active rather than which is loudest. Keeps the
+   rule legible and keeps it driven by actual spikes.
+2. Partition by activity instead of by index, so the five blocks are matched at
+   rest. Requires a calibration pass, and the split then depends on a prior run.
+3. Leave it, and accept that the operator has favourites. Defensible as a
+   statement, but it makes three chambers decorative, and a viewer counting
+   chambers will notice.
+
+Option 1 is the likely fix: it preserves "driven by actual spike activity, not
+an RNG with a skin on it" while removing a fixed winner that is an artefact of
+bodyId ordering rather than anything the fly is doing.
