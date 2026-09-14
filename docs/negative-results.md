@@ -106,3 +106,23 @@ is purely that raw argmax over unequal baselines has a fixed winner.
 Option 1 is the likely fix: it preserves "driven by actual spike activity, not
 an RNG with a skin on it" while removing a fixed winner that is an artefact of
 bodyId ordering rather than anything the fly is doing.
+
+### Resolution
+
+Each block is now divided by its own slow baseline before the argmax, so the
+dial responds to which block is *unusually* active rather than which is loudest.
+
+Replayed against the same 300 steps of real operator DN activity:
+
+| | before | after |
+|---|---|---|
+| chambers reached | 0, 1 | 0, 1, 2, 3, 4 |
+| switches | 17 | 59 |
+| time per chamber | not measured | 86, 61, 31, 90, 32 |
+
+All five reachable, and no chamber is decorative. Still driven entirely by
+spikes, still no RNG, and the rule is still one paragraph to read.
+
+The 700ms run in flight at the time was killed at step 2900 of 7000, about 11
+minutes in, because it was using the old readout and would have produced a clip
+in which three of the five chambers were never heated.
