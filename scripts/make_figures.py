@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from amfly.config import CHAMBERS, LIF, OPERATOR  # noqa: E402
 from amfly.io.spikes import load_run  # noqa: E402
+from amfly.sim.analysis import analyse, unheated_stayed_identical  # noqa: E402
 from amfly.viz import traces  # noqa: E402
 
 REFERENCE = CHAMBERS[1]  # an unheated chamber; see amfly/sim/divergence.py
@@ -118,13 +119,33 @@ def main() -> int:
         for i in range(ham.shape[1]):
             if i == REFERENCE:
                 continue
-            d = np.flatnonzero(ham[:, i])
             label = "operator" if i == OPERATOR else f"chamber {i}"
-            if len(d):
-                log.info("%s diverges at step %d, final distance %d",
-                         label, d[0], cum[-1, i])
-            else:
-                log.info("%s never diverged; still the same program", label)
+            log.info("%s: %s", label, analyse(ham, i).summary())
+
+        # The property every plot from this run depends on.
+        #
+        # Which instances were heated comes from the recorded heat, not from
+        # the divergence itself. Once the dial moves, several chambers are
+        # heated over a run, and inferring a single heated chamber from the
+        # distances would flag a legitimate multi-chamber run as drift.
+        ever_heated = set(np.flatnonzero(data["heat"].max(axis=0) > 0).tolist())
+        strays = [
+            i
+            for i in range(ham.shape[1])
+            if i != REFERENCE and i not in ever_heated and np.any(ham[:, i] != 0)
+        ]
+        if not strays:
+            log.info(
+                "never-heated instances stayed bit-identical (%d of them)",
+                ham.shape[1] - len(ever_heated) - 1,
+            )
+        else:
+            log.error(
+                "instances %s were never heated yet diverged. Something other "
+                "than heat is separating them, so these plots do not mean what "
+                "they appear to. Check determinism before using this run.",
+                strays,
+            )
     else:
         log.warning("no hamming data in run; divergence plot skipped")
 
