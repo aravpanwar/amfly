@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Connectome data. 1.1GB, fetched by scripts/fetch_data.py and pinned by SHA-256.
+data/*.feather
+cache/
+*.npz
+
+# Simulation output
+runs/
+out/
+*.mp4
+*.gif
