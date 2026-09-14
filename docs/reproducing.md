@@ -94,3 +94,19 @@ has crept in. It is not the piece working.
 Bit-identity is guaranteed within one machine and one configuration. Identical
 results across different GPUs, CUDA versions or torch builds are not promised,
 which is why every run records its backend in `provenance.json`.
+
+## Verified run, 2026-09-14
+
+Full suite against the real connectome on an RTX 4050 laptop, CPU path:
+
+```
+31 passed in 236.96s
+```
+
+That includes the slow gates that load the 1.1GB dataset and run the full
+166,700-neuron network twice. Every count, determinism, isolation, divergence,
+dial, heat, metric and analysis gate green.
+
+Machine: Windows 11, Python 3.11.4, numpy/scipy CPU path, torch 2.14.0+cpu.
+Step time drifted from 206ms to 250ms over a long run, which is thermal
+throttling and affects wall clock only.
