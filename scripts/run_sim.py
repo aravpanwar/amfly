@@ -29,8 +29,8 @@ from amfly.io.spikes import Recorder  # noqa: E402
 from amfly.sim.backend import configure_torch_determinism, describe  # noqa: E402
 from amfly.sim.divergence import Divergence  # noqa: E402
 from amfly.sim.engine import Engine, State  # noqa: E402
-from amfly.wiring.chambers import Heat  # noqa: E402
-from amfly.wiring.operator import Dial  # noqa: E402
+from amfly.wiring.chambers import ContinuousHeat  # noqa: E402
+from amfly.wiring.dials import Dials  # noqa: E402
 
 log = logging.getLogger("amfly")
 
@@ -103,11 +103,11 @@ def main() -> int:
         st = State.initial(c.n, lif)
         zeros = lambda: np.zeros((c.n, 6), dtype=np.float32)
         to_np = lambda x: x
-    dial = Dial.build(dn, lif.dt_ms, window_ms=args.dial_window_ms)
+    dial = Dials.build(dn, lif.dt_ms, window_ms=args.dial_window_ms)
     if args.dial_latency_ms is not None:
         dial.latency_steps = max(1, int(round(args.dial_latency_ms / lif.dt_ms)))
         log.info("dial latency overridden to %.0f ms", args.dial_latency_ms)
-    heat = Heat(th, c.n, 6)
+    heat = ContinuousHeat(th, c.n, 6)
     rec = Recorder.build(c.n, 6, dn, th)
     div = Divergence()
 
@@ -127,7 +127,7 @@ def main() -> int:
     log.info("running %d steps (%.1f ms simulated)", steps, args.ms)
     t0 = time.time()
     for t in range(steps):
-        heat_inj = heat.injection(dial.position)
+        heat_inj = heat.injection(dial.levels)
         inj = zeros()
         if use_cuda:
             inj += torch.from_numpy(heat_inj).to("cuda")
@@ -138,21 +138,25 @@ def main() -> int:
 
         spikes_dev = eng.step(st, inj)
         spikes = to_np(spikes_dev)
-        pos = dial.update(spikes, t)
+        levels = dial.update(spikes, t)
+        pos = int(np.argmax(levels))  # hottest chamber, for the summary only
         ham = div.update(spikes, t)
         rec.record(t, spikes, heat.levels, pos, ham)
 
         if t % 100 == 0 and t:
             el = time.time() - t0
             log.info(
-                "  step %d/%d  %.0f ms/step  dial=%d  rates=%s",
-                t, steps, el / t * 1000, pos, spikes.sum(axis=0),
+                "  step %d/%d  %.0f ms/step  heat=%s  rates=%s",
+                t, steps, el / t * 1000,
+                (levels * 100).astype(int), spikes.sum(axis=0),
             )
 
     elapsed = time.time() - t0
     log.info("done in %.1fs (%.0f ms/step)", elapsed, elapsed / steps * 1000)
 
-    log.info("dial switches: %d", len(dial.history))
+    lv = dial.level_history()
+    log.info("final heat levels: %s", (lv[-1] * 100).round(0))
+    log.info("max level reached per chamber: %s", (lv.max(axis=0) * 100).round(0))
     if div.first_divergence:
         for i in sorted(div.first_divergence):
             log.info("  instance %d diverged at step %d",
@@ -161,9 +165,10 @@ def main() -> int:
         log.info("  no instance diverged; this is a negative result, record it")
     log.info("final cumulative distance: %s", div.cumulative()[-1])
     identical = not div.first_divergence
-    if identical and len(dial.history) == 0:
+    if lv.max() == 0.0:
         log.warning(
-            "no dial movement yet: latency is %.0f ms, so run at least that long",
+            "no chamber was ever heated: latency is %.0f ms, so run at least "
+            "that long",
             lif.delay_ms + dial.latency_steps * lif.dt_ms,
         )
 
@@ -174,9 +179,9 @@ def main() -> int:
                 **c.provenance,
                 "steps": steps,
                 "ms": args.ms,
-                "dial_switches": len(dial.history),
                 "first_divergence": div.first_divergence,
-                "dial_history": dial.history,
+                "final_levels": dial.levels.tolist(),
+                "max_levels": dial.level_history().max(axis=0).tolist(),
                 "seconds": round(elapsed, 1),
                 "backend": describe(),
             },
