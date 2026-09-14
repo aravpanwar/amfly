@@ -13,6 +13,13 @@ descending neurons into 5 contiguous blocks by sorted bodyId, count spikes per
 block in a sliding window, point at the argmax. Ties break to the lowest index.
 Nothing is learned, nothing is randomised, and the mapping can be audited by
 reading this file.
+
+The partition is arbitrary and is declared as such. Measured: the five blocks
+hold 263, 263, 263, 263 and 262 DNs and span 181, 183, 142, 81 and 180 distinct
+DN types respectively, so no block is a single functional group and the mapping
+carries no anatomical claim. It is a legible rule for turning one fly's
+descending activity into a choice of five, nothing more. Reading it as "block 3
+is the escape pathway" would be wrong.
 """
 
 from __future__ import annotations
