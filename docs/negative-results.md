@@ -207,3 +207,58 @@ the control signal on top of it is not doing what the piece needs.
 chamber, so a decision persists long enough for the heat to matter and for a
 viewer to read the causality. Latency and dwell are different properties and the
 piece needs both.
+
+## 2026-09-14: the dwell fix worked, and exposed a deeper limit
+
+**Run:** r004, 3000ms, 30,000 steps, 300ms dwell added, GPU.
+
+**The dwell fix is confirmed.** Switches dropped from 725 to 8, exactly the
+maximum the arithmetic allows (25,000 usable steps / 3,000 dwell). Median hold
+is 3,000 steps, precisely the dwell, with zero holds under 100 steps against 688
+before. The sequence `0, 3, 0, 3, 0, 2, 4, 1, 3` visits all five chambers, and
+every chamber spent at least 2,805 steps at full 8.0mV heat.
+
+**And it did not make the piece readable.** Per chamber:
+
+| chamber | steps at full heat | total distance | peak |
+|---|---|---|---|
+| 0 | 13,637 | 43,548,269 | 2,102 |
+| 1 | 2,805 | 264 | **1** |
+| 2 | 2,805 | 612 | **1** |
+| 3 | 6,191 | 1,290 | **1** |
+| 4 | 2,805 | 436 | **1** |
+| operator | 0 | 0 | 0 |
+
+Chambers 1 to 4 reach a peak spike-identity distance of exactly **one neuron**
+and stay there, across thousands of steps of full heat. Chamber 3 was heated for
+6,191 steps and never exceeded 1. Chamber 0 passed 1,138 within its first 1,000
+steps.
+
+**It is not duration and it is not intensity.** Both were ample. The difference
+is *when* the heat arrives. Chamber 0 is heated from step 18, while the network
+is still settling out of its initial conditions. Every other chamber is heated
+into an already-established driven rhythm, and that rhythm absorbs the
+perturbation: one neuron flips, the next drive pulse overwrites it, nothing
+compounds.
+
+This is the same phenomenon as the tonic-drive failure recorded above, in a
+subtler form. A network locked to a periodic drive is resistant to perturbation
+regardless of how large the perturbation is, because the drive re-synchronises
+it every cycle. Making the drive phasic was enough to let a *settling* network
+diverge. It is not enough to let a *settled* one diverge.
+
+**What is not in doubt:** the operator is exactly 0 across the whole run, so
+isolation holds, and chamber 0 demonstrates the mechanism works when the network
+is susceptible. The simulation is correct. The regime is wrong.
+
+**Options, none chosen yet:**
+
+1. Weaker or sparser background drive, so the network is not locked to a rhythm
+   that overwrites perturbations. Risks the network going silent.
+2. Heat a larger population than the 25 TRN_VP thermoreceptors, so the
+   perturbation is large relative to the drive.
+3. Start with the dial already moving, so no chamber gets the privileged
+   settling-phase heating that makes chamber 0 incomparable to the rest.
+
+Option 1 is the likely one, and it is the same lesson twice: a synchronised
+network does not diverge.
