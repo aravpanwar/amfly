@@ -43,6 +43,10 @@ def main() -> int:
     ap.add_argument("--baseline-mv", type=float, default=5.0,
                     help="phasic drive amplitude, identical to all six")
     ap.add_argument("--dial-window-ms", type=float, default=50.0)
+    ap.add_argument("--dial-latency-ms", type=float, default=None,
+                    help="override the 500ms authored latency. Shorten it to "
+                         "see switches in a short run; the 500ms default is "
+                         "the authored value for a finished clip.")
     ap.add_argument("--pulse-period-ms", type=float, default=10.0,
                     help="phasic drive period; tonic drive synchronises the "
                          "network and suppresses divergence")
@@ -67,6 +71,9 @@ def main() -> int:
     eng = Engine(c.csr, lif)
     st = State.initial(c.n, lif)
     dial = Dial.build(dn, lif.dt_ms, window_ms=args.dial_window_ms)
+    if args.dial_latency_ms is not None:
+        dial.latency_steps = max(1, int(round(args.dial_latency_ms / lif.dt_ms)))
+        log.info("dial latency overridden to %.0f ms", args.dial_latency_ms)
     heat = Heat(th, c.n, 6)
     rec = Recorder.build(c.n, 6, dn, th)
     div = Divergence()
