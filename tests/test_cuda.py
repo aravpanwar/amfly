@@ -111,3 +111,34 @@ def test_gpu_and_cpu_agree_on_spike_counts():
     assert gpu > 0 and total > 0
     ratio = gpu / total
     assert 0.5 < ratio < 2.0, f"backends disagree by {ratio:.2f}x, not reordering"
+
+
+def test_gpu_matches_cpu_exactly_on_this_hardware():
+    """Observed, not promised. See docs/decisions.md.
+
+    Both backends reduce in CSR index order, and on this machine that turns out
+    to produce byte-identical results. The design does not depend on it, but a
+    regression here would mean one backend's reduction order changed, which is
+    worth knowing about.
+    """
+    from amfly.sim.engine import Engine, State
+
+    csr = _toy()
+    gpu = _run(csr, steps=120)
+
+    lif = LIF()
+    eng = Engine(csr, lif)
+    st = State.initial(csr.shape[0], lif)
+    cpu = []
+    for t in range(120):
+        inj = np.zeros((csr.shape[0], 6), dtype=np.float32)
+        if t < 40:
+            inj[:30, :] = 3.0
+        cpu.append(eng.step(st, inj))
+    cpu = np.stack(cpu)
+
+    assert np.array_equal(gpu, cpu), (
+        "GPU and CPU diverged. Not a correctness failure by itself, since "
+        "cross-backend identity is not promised, but it means a reduction "
+        "order changed and the cause should be understood."
+    )

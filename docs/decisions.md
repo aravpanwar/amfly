@@ -27,10 +27,18 @@ CPU. The GPU path uses the same batched formulation, one `torch.sparse.mm` over
 all six columns with a fixed reduction order, so determinism is preserved rather
 than traded away for the 15.4x.
 
-Cross-backend bit-identity is NOT claimed. Different hardware reduces in a
-different though internally fixed order, so GPU and CPU can disagree on
-individual spikes. What holds on either backend is that the six instances match
-each other and that a rerun on one machine reproduces itself.
+Cross-backend bit-identity is not *promised*, but on this machine it is
+observed. The same 300-step configuration run on GPU and on CPU produced
+byte-identical output: same SHA-256 on the rate array, all 88,085 spike events
+matching, identical divergence onsets and dial history.
+
+That is a stronger result than the design requires and it should be treated as a
+happy accident of this hardware rather than a guarantee. Determinism within one
+backend is structural, because the reduction order is fixed by the CSR indices.
+Agreement *between* backends depends on both reducing in the same order, which
+is not something either library promises. The gates test the property that is
+guaranteed; the cross-backend check is recorded because it is informative, not
+because it is relied upon.
 
 ## Divergence measured by spike identity, not rate
 
