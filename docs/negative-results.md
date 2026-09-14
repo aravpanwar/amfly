@@ -262,3 +262,51 @@ is susceptible. The simulation is correct. The regime is wrong.
 
 Option 1 is the likely one, and it is the same lesson twice: a synchronised
 network does not diverge.
+
+### Correction: it is fan-out, not drive synchronisation
+
+The explanation above, that a settled network locked to a periodic drive absorbs
+the perturbation, is **wrong**. A sweep of six regimes, all heating only after
+the network had settled, says so plainly:
+
+| regime | peak distance | mean rate |
+|---|---|---|
+| baseline (r004) | 1 | 1,653 |
+| weaker drive, 2mV | 1 | 1,646 |
+| sparser drive, every 21st neuron | 1 | 1,688 |
+| slower drive, every 50ms | 1 | 1,662 |
+| **heat all 4,882 cb_sensory** | **1,446** | 1,661 |
+| heat 200mV into TRN_VP (25x) | 1 | 1,653 |
+
+Changing the drive does nothing. Raising heat intensity 25x does nothing. The
+only variable that mattered was **how many neurons the heat is injected into**.
+
+The cause is fan-out:
+
+| | TRN_VP | cb_sensory |
+|---|---|---|
+| neurons | 25 | 4,882 |
+| directly downstream | 551 | 10,566 |
+| outgoing synapses | 50,329 | 2,267,868 |
+
+45x the synaptic mass. Twenty-five thermoreceptors cannot inject enough signal
+into a 166,700-neuron network to move its trajectory, and turning the voltage up
+does not help because those 25 cells saturate: a neuron can only spike so often,
+so past threshold the extra millivolts buy nothing.
+
+Chamber 0 diverged in earlier runs not because it was heated during the settling
+phase, but because it was heated **continuously for 13,637 steps**, accumulating
+a great many one-neuron perturbations, while the others were heated in blocks of
+2,805. The settling-phase story fit the data and was not the mechanism.
+
+**Consequence for the piece.** `TRN_VP` is the anatomically correct
+thermoreceptor population and it is too small to carry the premise. The choice
+is between:
+
+1. Heating a broader sensory population, which diverges convincingly but is no
+   longer specifically "heat" and must not be described as such.
+2. Keeping TRN_VP and accepting that a chamber must be heated for thousands of
+   steps before it separates, which is honest but makes the dial nearly
+   irrelevant, since chamber 0's dominance comes from duration alone.
+
+Not yet decided. Option 1 must not be labelled heat if it is taken.
