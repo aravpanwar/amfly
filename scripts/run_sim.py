@@ -39,8 +39,8 @@ def main() -> int:
     ap.add_argument("--data", type=Path, default=Path("data"))
     ap.add_argument("--out", type=Path, default=Path("runs/latest"))
     ap.add_argument("--ms", type=float, default=100.0, help="simulated milliseconds")
-    ap.add_argument("--baseline-mv", type=float, default=6.0,
-                    help="identical drive to all six, keeps the network alive")
+    ap.add_argument("--baseline-mv", type=float, default=5.0,
+                    help="phasic drive amplitude, identical to all six")
     ap.add_argument("--dial-window-ms", type=float, default=50.0)
     ap.add_argument("--pulse-period-ms", type=float, default=10.0,
                     help="phasic drive period; tonic drive synchronises the "
