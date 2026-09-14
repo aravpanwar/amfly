@@ -10,10 +10,23 @@ finding and worth reporting.
 pip install -e .[dev]
 ```
 
-CPU works and is the reference. For clips longer than a few hundred
-milliseconds you want a CUDA build of torch, because the CPU path runs about
-200ms per 0.1ms step at 166,700 neurons, which is roughly 25 minutes per 700ms
-of simulated time.
+CPU works and is the reference, but it is about 15x slower. Install a CUDA
+build of torch:
+
+```
+pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu124
+```
+
+Measured on an RTX 4050 laptop at 166,700 neurons:
+
+| | GPU | CPU |
+|---|---|---|
+| per step | 9.5 ms | 146.9 ms |
+| 300 ms clip | 0.5 min | 7.3 min |
+| 30 s clip | 47.6 min | 734.6 min |
+
+The graph takes 394 MB of VRAM, so 6 GB is ample. `torch` from PyPI is
+CPU-only by default, which is the slow path.
 
 ```
 python -c "from amfly.sim.backend import describe; print(describe())"

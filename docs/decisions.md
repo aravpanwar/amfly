@@ -22,8 +22,15 @@ So: six instances batched as six columns, one shared CSR with sorted indices,
 one matmul per step, identical reduction order for every column. Bit-identity
 becomes structural rather than something to hope for.
 
-Cost is roughly 200ms per step on CPU at 166,700 neurons, so about 25 minutes
-per 700ms of simulated time. Acceptable for an offline piece.
+Measured cost at 166,700 neurons: 9.5ms per step on an RTX 4050, 146.9ms on
+CPU. The GPU path uses the same batched formulation, one `torch.sparse.mm` over
+all six columns with a fixed reduction order, so determinism is preserved rather
+than traded away for the 15.4x.
+
+Cross-backend bit-identity is NOT claimed. Different hardware reduces in a
+different though internally fixed order, so GPU and CPU can disagree on
+individual spikes. What holds on either backend is that the six instances match
+each other and that a rerun on one machine reproduces itself.
 
 ## Divergence measured by spike identity, not rate
 
