@@ -41,3 +41,27 @@ observable were wrong.
 
 **Changes:** shorten the ramp, drive with a sparser non-tonic input, and measure
 divergence on spike identity rather than on population rate.
+
+### Resolution
+
+**Run:** 60ms, 600 steps, chamber 0 heated, phasic drive into 698 strided
+`cb_sensory` neurons, 0.5ms pulse every 10ms, heat ramp shortened to 20ms.
+
+Heat reached its full 8.0mV target. Divergence began at step 18, about 1.8ms,
+which is one synaptic delay after the stimulus arrived. The heated chamber now
+differs from the others by roughly 700 neurons per step, with a cumulative
+spike-identity distance of 140,439 over the run, against the 1 neuron at 1 step
+that the tonic version produced.
+
+Total spike counts were 999,772 for the heated chamber against 998,825 for each
+of the other five, a difference of 947 spikes. Note the five unheated instances
+still matched each other exactly, which is the isolation property holding while
+the heated one moves.
+
+So all three causes were real and all three were mine. The connectome was never
+the problem.
+
+**Retained lesson:** a synchronised network resists divergence. Tonic drive is
+the natural thing to reach for and it quietly destroys the phenomenon, because
+every perturbation is overwritten by the next drive cycle before it can
+propagate. Phasic drive leaves the network free to carry a difference forward.
