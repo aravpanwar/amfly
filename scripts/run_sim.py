@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from amfly.config import CHAMBERS, LIF, OPERATOR  # noqa: E402
 from amfly.data.loader import load, verify_counts  # noqa: E402
 from amfly.io.spikes import Recorder  # noqa: E402
-from amfly.sim.backend import describe  # noqa: E402
+from amfly.sim.backend import configure_torch_determinism, describe  # noqa: E402
 from amfly.sim.divergence import Divergence  # noqa: E402
 from amfly.sim.engine import Engine, State  # noqa: E402
 from amfly.wiring.chambers import Heat  # noqa: E402
@@ -52,6 +52,8 @@ def main() -> int:
                          "network and suppresses divergence")
     ap.add_argument("--pulse-width-ms", type=float, default=0.5)
     ap.add_argument("--no-verify", action="store_true")
+    ap.add_argument("--cpu", action="store_true",
+                    help="force the numpy reference backend even if CUDA works")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -68,8 +70,20 @@ def main() -> int:
     th = c.thermo_indices()
     log.info("descending neurons: %d, thermoreceptors: %d", len(dn), len(th))
 
-    eng = Engine(c.csr, lif)
-    st = State.initial(c.n, lif)
+    use_cuda = (not args.cpu) and configure_torch_determinism()
+    if use_cuda:
+        from amfly.sim.engine_cuda import CudaEngine
+        import torch
+
+        eng = CudaEngine(c.csr, lif)
+        st = eng.initial_state()
+        zeros = lambda: torch.zeros((c.n, 6), dtype=torch.float32, device="cuda")
+        to_np = lambda x: x.cpu().numpy()
+    else:
+        eng = Engine(c.csr, lif)
+        st = State.initial(c.n, lif)
+        zeros = lambda: np.zeros((c.n, 6), dtype=np.float32)
+        to_np = lambda x: x
     dial = Dial.build(dn, lif.dt_ms, window_ms=args.dial_window_ms)
     if args.dial_latency_ms is not None:
         dial.latency_steps = max(1, int(round(args.dial_latency_ms / lif.dt_ms)))
@@ -94,10 +108,17 @@ def main() -> int:
     log.info("running %d steps (%.1f ms simulated)", steps, args.ms)
     t0 = time.time()
     for t in range(steps):
-        inj = heat.injection(dial.position)
+        heat_inj = heat.injection(dial.position)
+        inj = zeros()
+        if use_cuda:
+            inj += torch.from_numpy(heat_inj).to("cuda")
+        else:
+            inj += heat_inj
         if t % period < width:
             inj[drive, :] += np.float32(args.baseline_mv)
-        spikes = eng.step(st, inj)
+
+        spikes_dev = eng.step(st, inj)
+        spikes = to_np(spikes_dev)
         pos = dial.update(spikes, t)
         ham = div.update(spikes, t)
         rec.record(t, spikes, heat.levels, pos, ham)
