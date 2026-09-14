@@ -20,9 +20,11 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from amfly.config import LIF  # noqa: E402
+from amfly.config import CHAMBERS, LIF, OPERATOR  # noqa: E402
 from amfly.io.spikes import load_run  # noqa: E402
 from amfly.viz import traces  # noqa: E402
+
+REFERENCE = CHAMBERS[1]  # an unheated chamber; see amfly/sim/divergence.py
 
 log = logging.getLogger("amfly.figures")
 
@@ -104,19 +106,27 @@ def main() -> int:
     traces.save(fig, args.out / "traces.png")
     log.info("wrote %s", args.out / "traces.png")
 
-    fig = traces.divergence(rates, dt_ms=dt)
-    traces.save(fig, args.out / "divergence.png")
-    log.info("wrote %s", args.out / "divergence.png")
+    ham = data.get("hamming")
+    if ham is not None and len(ham):
+        cum = np.cumsum(ham, axis=0)
+        fig = traces.divergence(cum, dt_ms=dt, reference=REFERENCE)
+        traces.save(fig, args.out / "divergence.png")
+        log.info("wrote %s", args.out / "divergence.png")
 
-    # State the finding plainly either way. A run where nothing separated is a
-    # real result and gets reported, not hidden.
-    ref = rates[:, 0].astype(np.int64)
-    for c in range(1, 5):
-        d = np.flatnonzero(rates[:, c].astype(np.int64) != ref)
-        if len(d):
-            log.info("chamber %d diverges from chamber 0 at step %d", c, d[0])
-        else:
-            log.info("chamber %d never diverged from chamber 0", c)
+        # State the finding plainly either way. A run where nothing separated
+        # is a real result and gets reported, not hidden.
+        for i in range(ham.shape[1]):
+            if i == REFERENCE:
+                continue
+            d = np.flatnonzero(ham[:, i])
+            label = "operator" if i == OPERATOR else f"chamber {i}"
+            if len(d):
+                log.info("%s diverges at step %d, final distance %d",
+                         label, d[0], cum[-1, i])
+            else:
+                log.info("%s never diverged; still the same program", label)
+    else:
+        log.warning("no hamming data in run; divergence plot skipped")
 
     if not args.stills_only:
         frames = render_frames(data, args.out, args.frames, dt)
