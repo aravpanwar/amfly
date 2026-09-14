@@ -50,10 +50,16 @@ class Dial:
     _position: int = field(default=0, init=False)
     history: list = field(default_factory=list, init=False)
 
+    # Slow baseline per block, so the comparison is against each block's own
+    # recent history rather than against the other blocks' absolute rates.
+    _baseline_decay: float = 0.999
+    _baseline_floor: float = 1.0
+
     def __post_init__(self) -> None:
         # Contiguous blocks over the DNs, already in sorted bodyId order.
         self._blocks = np.array_split(self.dn_indices, self.n_blocks)
         self._counts = np.zeros((self.window_steps, self.n_blocks), dtype=np.int32)
+        self._baseline = np.zeros(self.n_blocks, dtype=np.float64)
 
     @classmethod
     def build(cls, dn_indices, dt_ms: float, window_ms: float = 50.0) -> "Dial":
@@ -80,9 +86,26 @@ class Dial:
         for b, block in enumerate(self._blocks):
             self._counts[slot, b] = int(operator_spikes[block].sum())
 
-        totals = self._counts.sum(axis=0)
-        # argmax already breaks ties to the lowest index, deterministically.
-        target = int(np.argmax(totals))
+        totals = self._counts.sum(axis=0).astype(np.float64)
+
+        # Normalise each block by its own slow baseline before comparing.
+        #
+        # Raw argmax over these counts has a fixed winner: measured block totals
+        # were [228, 231, 150, 152, 184], so blocks 0 and 1 always won and three
+        # chambers were never heated. Equal-sized blocks equalise neuron count,
+        # not firing rate, and DN rates are not uniform across sorted bodyId.
+        # See docs/negative-results.md.
+        #
+        # Dividing by the running mean asks "which block is unusually active
+        # right now" instead of "which block is loudest", which is both the more
+        # interesting question and the one that can actually select all five.
+        # Still driven entirely by spikes, with no RNG.
+        self._baseline *= self._baseline_decay
+        self._baseline += (1.0 - self._baseline_decay) * totals
+
+        relative = totals / np.maximum(self._baseline, self._baseline_floor)
+        # argmax breaks ties to the lowest index, deterministically.
+        target = int(np.argmax(relative))
 
         # Commit the decision to fire `latency_steps` from now.
         self._pending.append((step + self.latency_steps, target))

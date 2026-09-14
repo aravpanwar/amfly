@@ -118,3 +118,49 @@ def test_empty_thermo_targets_raise():
     """
     with pytest.raises(ValueError, match="thermosensory"):
         Heat(np.array([], dtype=int), N, 6)
+
+
+def test_dial_reaches_a_quiet_block_when_it_becomes_unusually_active():
+    """The fix for the two-of-five coverage failure.
+
+    A block with a persistently lower rate must still be selectable when it
+    rises relative to its own history. Under raw argmax it never could, and
+    three of the five chambers were never heated.
+    """
+    d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
+    d.latency_steps = 5
+
+    loud = np.arange(0, 20)    # block 0
+    quiet = np.arange(60, 80)  # block 3
+
+    # Long stretch where block 0 dominates outright.
+    s = _spikes(loud)
+    for t in range(400):
+        d.update(s, t)
+    assert d.position == 0
+
+    # Block 3 becomes active. It is no louder than block 0 ever was, but it is
+    # far above its own baseline, so it must win.
+    s2 = np.zeros((N, 6), dtype=bool)
+    s2[loud, OPERATOR] = True
+    s2[quiet, OPERATOR] = True
+    reached = False
+    for t in range(400, 700):
+        if d.update(s2, t) == 3:
+            reached = True
+            break
+    assert reached, "a quiet block never became selectable; coverage is broken"
+
+
+def test_normalised_readout_is_still_deterministic():
+    """The baseline is state, so confirm it does not introduce run-to-run drift."""
+    def run():
+        d = Dial.build(DN, dt_ms=0.1, window_ms=5.0)
+        d.latency_steps = 5
+        out = []
+        for t in range(300):
+            s = _spikes(np.arange(20, 40) if t % 50 < 25 else np.arange(60, 80))
+            out.append(d.update(s, t))
+        return out
+
+    assert run() == run()
