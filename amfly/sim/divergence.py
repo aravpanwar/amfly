@@ -31,7 +31,10 @@ class Divergence:
     are not.
     """
 
-    reference: int = CHAMBERS[0]
+    # An UNHEATED chamber, so the heated one stands out alone. Referencing the
+    # heated chamber makes every other instance show the same large distance
+    # and the plot reads as five chambers diverging rather than one.
+    reference: int = CHAMBERS[1]
     n_instances: int = 6
     per_step: list = field(default_factory=list, init=False)
     first_divergence: dict = field(default_factory=dict, init=False)
