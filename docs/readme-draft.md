@@ -70,8 +70,8 @@ is the connection count, not the synapse count.
 - **Glutamate is treated as inhibitory** (GluCl), following Shiu. This surprises
   people coming from vertebrate work.
 - **1.9% of neurons (3,177) have unclear or missing neurotransmitter predictions**
-  and default to excitatory. A sensitivity run that silences them instead is
-  available with `silence_unclear_nt`.
+  and default to excitatory. Run `--silence-unclear-nt` to silence them instead
+  and see how much the result depends on that choice.
 - **Bit-identity is guaranteed within one machine and configuration.** Identical
   results across different GPUs are not promised.
 
