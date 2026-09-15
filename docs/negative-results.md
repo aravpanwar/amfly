@@ -310,3 +310,87 @@ is between:
    irrelevant, since chamber 0's dominance comes from duration alone.
 
 Not yet decided. Option 1 must not be labelled heat if it is taken.
+
+## 2026-09-14: the dials started mid-range, and that alone broke the piece
+
+Five continuous dials replaced the single switch. The dials worked: driven by
+real operator activity they reached genuinely different levels. The chambers
+still came out identical to each other, and it took a long chain of eliminations
+to find why.
+
+**Ruled out, each by measurement:**
+
+- *Too few thermoreceptors.* No. Five instances held at constant 0, 2, 4, 6 and
+  8 mV separate by about 2,400 neurons. The 25 TRN_VP cells discriminate fine.
+- *The background drive masking the heat.* No. All 25 thermoreceptors are inside
+  `cb_sensory` and the drive hits 698 of those, but excluding them, including
+  them and removing the drive entirely all separated correctly.
+- *Injecting millivolts instead of firing rates.* No. `tel-0s/flyverse-core`
+  drives sensory neurons in Hz (`base_hz=1.0, max_hz=150.0`) rather than as
+  injected voltage, which is the better convention and worth adopting, but
+  rate-coding the same ramp gave 1682 for all five: identical, unchanged.
+- *Cumulative measurement swamped by a shared opening.* Partly true and not the
+  cause. A trailing 500-step window still gave 847,939 against 847,948 for
+  chambers at 8.0 mV and 0.0 mV.
+
+**The actual cause.** The dials were initialised to 0.5, half scale, so every
+chamber began *identically heated* at 4 mV. The network locks onto a shared
+trajectory from the first step and never escapes it, however far the levels
+diverge afterwards. Starting mid-range was my own change, made earlier the same
+day so that levels could move both directions from the outset.
+
+The comparison that isolates it, same brain, same drive, same final levels:
+
+| onset | distance from operator |
+|---|---|
+| constant 8.0/8.0/0.6/0.0/0.0 from step 0 | 1663, 1663, 1342, 0, 0 |
+| linear ramp from **zero**, then hold | 979, 979, 349, 0, 0 |
+| **abrupt switch-on at step 1000** | **0, 0, 0, 0, 0** |
+| the dials' own history, starting at 0.5 | 1678, 1678, 1678, 1678, 1678 |
+
+Two things fall out of that table. Ramping is fine, so long as it starts from
+zero. And heat that arrives late does nothing at all: a chamber switched to full
+heat at step 1000 and held there for another 1000 steps ended at distance zero.
+
+**The rule.** The chambers must differ from the very first step. From zero they
+do, because each rises at its own rate. From a shared nonzero start they never
+recover, and no amount of later separation in the dial levels repairs it.
+
+**After the fix**, levels 58%, 89%, 0%, 0%, 0% gave distances 68463, 68464, 106,
+0, 0 with the operator at 0: heated chambers diverge, untouched chambers sit at
+exactly zero.
+
+## 2026-09-14: turning the heat up does not help, and past 8 mV it actively hurts
+
+The obvious response to a weak signal is more of it. Measured, across four
+amplitudes and two onsets, 3,000 steps, five chambers at amp, 0.75, 0.5, 0.25
+and 0 of full:
+
+| amplitude | onset | distance from operator |
+|---|---|---|
+| 8 mV | step 0 | 2622, 2411, 2360, 2361, 0 |
+| 40 mV | step 0 | 2622, 2622, 2622, 2622, 0 |
+| 200 mV | step 0 | 2622, 2622, 2622, 2622, 0 |
+| 1000 mV | step 0 | 2622, 2622, 2622, 2622, 0 |
+| 8 mV | step 5000 | **0, 0, 0, 0, 0** |
+| 200 mV | step 5000 | **0, 0, 0, 0, 0** |
+| 1000 mV | step 5000 | **0, 0, 0, 0, 0** |
+
+**Two findings, both against intuition.**
+
+**More heat destroys the gradient.** At 8 mV the five chambers are
+distinguishable from one another. At 40 mV and above they are identical: every
+chamber reads 2622 and 2170 spikes regardless of whether it was set to 100% or
+25%. The thermoreceptors saturate. A neuron has a refractory period of 2.2 ms,
+so it cannot exceed roughly 450 Hz however hard it is driven, and once all 25
+are at that ceiling the dial position stops carrying information. **8 mV is
+near the top of the useful range, not the bottom.**
+
+**Late heat does nothing at any amplitude.** Starting at step 5000 gives
+distance zero at 8 mV, at 200 mV, and at 1000 mV. A 125-fold increase changes
+nothing at all. Whatever the mechanism, it is not something amplitude reaches.
+
+**Consequence.** The only lever that works is *when* the heat starts, not how
+hard. Chambers must be heated from step 0 or they never separate. That collides
+directly with the authored 500 ms dial latency, which guarantees nothing is
+heated for the first 5,000 steps. The two cannot both be kept as they are.
