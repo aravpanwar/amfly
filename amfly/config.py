@@ -130,9 +130,17 @@ CHAMBERS = (0, 1, 2, 3, 4)
 THERMO_PREFIX = "TRN_VP"  # 4 types, 25 bodies. Primary heat channel.
 HYGRO_PREFIX = "HRN_VP"  # 4 types, 66 bodies. Secondary, off by default.
 
-# Perceptible lag between an operator spike and the chamber responding, so a
-# viewer can learn to predict it before understanding why.
-DIAL_LATENCY_MS: float = 500.0
+# Lag between an operator spike and the chamber responding.
+#
+# Was 500ms, the authored value, chosen so a viewer could learn to predict the
+# chamber event from the burst. Measured, it cost the piece its picture: nothing
+# is heated for the first 5,000 steps, all six instances run identically through
+# that window and lock onto a shared trajectory, and the divergence that follows
+# peaks at a single neuron instead of thousands.
+#
+# Heat has to be present from step 0 or the chambers never separate. 20ms keeps
+# a visible lag without the dead opening. See docs/negative-results.md.
+DIAL_LATENCY_MS: float = 20.0
 
 SUPERCLASS_DESCENDING = "descending_neuron"
 
