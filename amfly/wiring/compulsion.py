@@ -1,0 +1,144 @@
+"""The operator is not indifferent. It is trapped.
+
+This replaces the original design, in which the operator never received
+anything from the chambers. `project.md` chose indifference over cruelty, and
+that version was honest: the isolation was enforced in code and tested.
+
+This version is worse for the operator and better as a piece. It is given a
+reason to keep the chambers hot, and it cannot satisfy all five:
+
+  - It can only hold TWO dials at a time. The other three drift down.
+  - Driving any chamber to 100% stimulates its own reward circuit.
+  - Any chamber that falls below half heats the operator, through its own
+    thermoreceptors, exactly as the chambers are heated.
+
+So it rushes between five dials it cannot all hold, rewarded for the one it
+reaches and punished for the four it does not. The sixth fly is not the one
+outside the cage; it is the one that cannot stop.
+
+Both inputs are real measured circuits, not invented ones:
+
+  - Reward: 340 dopaminergic neurons (PAM 316, PPL1 16, PPL2 8) acting on the
+    mushroom body, 4,064 Kenyon cells and 97 MBONs. This is the fly's actual
+    reinforcement pathway.
+  - Punishment: the operator's own TRN_VP thermoreceptors, the same 25 cells
+    heated in every chamber.
+
+What is authored, and must be said plainly in the README:
+
+  - The two-dial limit is a rule of the piece, not a property of the fly.
+  - The 100% and 50% thresholds are chosen.
+  - Stimulating PAM is not the same as the fly wanting anything. It is current
+    injected into neurons that participate in reinforcement learning. Nothing
+    here experiences reward, and the README must not imply otherwise.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+import numpy as np
+
+from ..config import CHAMBERS, OPERATOR
+
+# Dopaminergic populations, by cell-type prefix. Verified present in
+# MaleCNS v1.0: PAM 316, PPL1 16, PPL2 8.
+REWARD_PREFIXES = ("PAM", "PPL1", "PPL2")
+
+# A chamber at or above this counts as satisfied and pays out.
+REWARD_AT = 0.98
+
+# Below this, a chamber is neglected and the operator is heated for it.
+NEGLECT_BELOW = 0.5
+
+# How many dials the operator can hold at once. The whole point: it cannot
+# hold five, so it must choose, and it is punished for choosing.
+GRIP = 2
+
+
+@dataclass
+class Compulsion:
+    """Closes the loop: chamber state reaches the operator's brain."""
+
+    reward_indices: np.ndarray
+    thermo_indices: np.ndarray
+    n_neurons: int
+    n_instances: int
+
+    reward_mv: float = 6.0
+    punish_mv: float = 8.0
+
+    # Reward decays fast, punishment lingers. Relief is brief; being burned
+    # for the four you neglected is not.
+    reward_decay: float = 0.988
+    punish_decay: float = 0.9985
+
+    _reward: float = field(default=0.0, init=False)
+    _punish: float = field(default=0.0, init=False)
+    history: list = field(default_factory=list, init=False)
+
+    def __post_init__(self) -> None:
+        if len(self.reward_indices) == 0:
+            raise ValueError(
+                "no dopaminergic neurons resolved; expected PAM/PPL1/PPL2"
+            )
+        self._buf = np.zeros((self.n_neurons, self.n_instances), dtype=np.float32)
+
+    def update(self, levels: np.ndarray) -> np.ndarray:
+        """Chamber levels in, injection for the OPERATOR column out.
+
+        Returns an (N, n_instances) array that writes only the operator's
+        column. The five chambers are never touched by this: they are heated
+        by the dials, and nothing here reaches them.
+        """
+        levels = np.asarray(levels, dtype=np.float32)[: len(CHAMBERS)]
+
+        satisfied = int(np.count_nonzero(levels >= REWARD_AT))
+        neglected = int(np.count_nonzero(levels < NEGLECT_BELOW))
+
+        # Reward is a pulse on reaching a chamber, not a standing payment.
+        self._reward *= self.reward_decay
+        if satisfied:
+            self._reward = min(1.0, self._reward + 0.35 * satisfied)
+
+        # Punishment scales with how many it let slip, and fades slowly.
+        self._punish *= self.punish_decay
+        if neglected:
+            self._punish = min(1.0, self._punish + 0.02 * neglected)
+
+        self._buf[:] = 0.0
+        if self._reward > 1e-4:
+            self._buf[self.reward_indices, OPERATOR] = (
+                self._reward * self.reward_mv
+            )
+        if self._punish > 1e-4:
+            self._buf[self.thermo_indices, OPERATOR] += (
+                self._punish * self.punish_mv
+            )
+
+        self.history.append((self._reward, self._punish, satisfied, neglected))
+        return self._buf
+
+    @property
+    def state(self) -> tuple:
+        return self._reward, self._punish
+
+    def summary(self) -> dict:
+        h = np.array([(r, p) for r, p, _, _ in self.history], dtype=np.float32)
+        sat = np.array([s for _, _, s, _ in self.history])
+        neg = np.array([n for _, _, _, n in self.history])
+        return {
+            "mean_reward": float(h[:, 0].mean()) if len(h) else 0.0,
+            "mean_punish": float(h[:, 1].mean()) if len(h) else 0.0,
+            "steps_with_a_maxed_chamber": int((sat > 0).sum()),
+            "mean_neglected_chambers": float(neg.mean()) if len(neg) else 0.0,
+        }
+
+
+def resolve_reward_neurons(cell_type: np.ndarray) -> np.ndarray:
+    """Indices of the dopaminergic reward populations."""
+    t = cell_type.astype(str)
+    keep = np.zeros(len(t), dtype=bool)
+    for pre in REWARD_PREFIXES:
+        keep |= np.char.startswith(t, pre)
+    return np.flatnonzero(keep)

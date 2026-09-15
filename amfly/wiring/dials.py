@@ -77,6 +77,19 @@ class Dials:
     # accumulation saturated regardless.
     contrast: float = 3.0
 
+    # How many buttons the operator can press at once. None or n_blocks means
+    # no limit, which is the original design.
+    grip: int | None = None
+
+    # Buttons rather than dials: pressing raises a level, releasing lets it
+    # fall. Set False for the original tracking behaviour.
+    buttons: bool = True
+
+    # A button is faster to raise than a released level is to fall, so holding
+    # a chamber high is possible but only by staying on it.
+    press_rate: float = 1.0 / 260.0
+    release_rate: float = 1.0 / 900.0
+
     history: list = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
@@ -212,7 +225,34 @@ class Dials:
         while self._queue and self._queue[0][0] <= step:
             _, applied = self._queue.pop(0)
 
-        if applied is not None:
+        # BUTTONS, not dials.
+        #
+        # A dial holds a position when you let go. A button does not: press and
+        # the level climbs, release and it falls. That is the more legible
+        # object and the crueller one, because nothing the operator achieves
+        # stays achieved. Holding a chamber at 100% means never stopping.
+        #
+        # GRIP: only the two strongest demands are actually pressed. The rest
+        # are released and fall on their own.
+        #
+        # This is the constraint that makes the operator rush. With five dials
+        # freely held it can satisfy everything and there is no conflict; with
+        # two it must choose, and it is punished for the three it drops. The
+        # limit is a rule of the piece, not a property of the fly, and the
+        # README says so.
+        if applied is not None and self.grip and self.grip < self.n_blocks:
+            held = np.argsort(-applied)[: self.grip]
+            gated = np.full_like(applied, -1.0)
+            gated[held] = applied[held]
+            applied = gated
+
+        if applied is not None and self.buttons:
+            # Pressed climbs, released falls. No target, no holding position.
+            pressed = applied > 0.0
+            delta = np.where(pressed, self.press_rate, -self.release_rate)
+            self._levels += delta.astype(np.float32)
+            np.clip(self._levels, 0.15, 1.0, out=self._levels)
+        elif applied is not None:
             # Move TOWARDS the target, do not accumulate into it.
             #
             # This was `self._levels += applied * slew_rate`, an integrator with

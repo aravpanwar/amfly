@@ -30,6 +30,9 @@ from amfly.sim.backend import configure_torch_determinism, describe  # noqa: E40
 from amfly.sim.divergence import Divergence  # noqa: E402
 from amfly.sim.engine import Engine, State  # noqa: E402
 from amfly.wiring.chambers import ContinuousHeat  # noqa: E402
+from amfly.wiring.compulsion import (  # noqa: E402
+    Compulsion, resolve_reward_neurons,
+)
 from amfly.wiring.dials import Dials  # noqa: E402
 
 log = logging.getLogger("amfly")
@@ -42,6 +45,11 @@ def main() -> int:
     ap.add_argument("--ms", type=float, default=100.0, help="simulated milliseconds")
     ap.add_argument("--baseline-mv", type=float, default=5.0,
                     help="phasic drive amplitude, identical to all six")
+    ap.add_argument("--grip", type=int, default=2,
+                    help="dials the operator can hold at once; 5 removes the "
+                         "limit and restores the original indifferent design")
+    ap.add_argument("--no-compulsion", action="store_true",
+                    help="original design: the operator gets no feedback at all")
     ap.add_argument("--record-sample", type=int, default=2000,
                     help="neurons recorded at full resolution, for the brain "
                          "view. 2000 lights only ~500 of 24000 rendered points")
@@ -112,6 +120,7 @@ def main() -> int:
     dn_out = np.abs(c.csr[:, dn]).sum(axis=0).A.ravel()
     dial = Dials.build(dn, lif.dt_ms, window_ms=args.dial_window_ms,
                        dn_weights=dn_out)
+    dial.grip = None if args.grip >= 5 else args.grip
     _loads = [float(dn_out[np.searchsorted(dn, b)].sum()) for b in dial._blocks]
     log.info("DN block synaptic load: %s (spread %.2fx)",
              [int(v) for v in _loads], max(_loads) / max(min(_loads), 1))
@@ -120,6 +129,16 @@ def main() -> int:
         log.info("dial latency overridden to %.0f ms", args.dial_latency_ms)
     heat = ContinuousHeat(th, c.n, 6)
     rec = Recorder.build(c.n, 6, dn, th, sample=args.record_sample)
+
+    # Close the loop: chamber state reaches the operator. Reward through the
+    # real dopaminergic populations, punishment through its own
+    # thermoreceptors. See amfly/wiring/compulsion.py.
+    comp = None
+    if not args.no_compulsion:
+        rew = resolve_reward_neurons(c.cell_type)
+        comp = Compulsion(rew, th, c.n, 6)
+        log.info("compulsion: %d reward neurons (PAM/PPL1/PPL2), grip %s",
+                 len(rew), dial.grip or "unlimited")
     div = Divergence()
 
     # Phasic drive into a strided slice of the central-brain sensory neurons.
@@ -146,6 +165,13 @@ def main() -> int:
             inj += heat_inj
         if t % period < width:
             inj[drive, :] += np.float32(args.baseline_mv)
+
+        if comp is not None:
+            comp_inj = comp.update(heat.levels / 8.0)
+            if use_cuda:
+                inj += torch.from_numpy(comp_inj).to("cuda")
+            else:
+                inj += comp_inj
 
         spikes_dev = eng.step(st, inj)
         spikes = to_np(spikes_dev)
@@ -195,6 +221,8 @@ def main() -> int:
                 "max_levels": dial.level_history().max(axis=0).tolist(),
                 "seconds": round(elapsed, 1),
                 "backend": describe(),
+                "grip": dial.grip,
+                "compulsion": comp.summary() if comp is not None else None,
             },
             indent=2,
         )
