@@ -167,6 +167,9 @@ def main() -> int:
             inj[drive, :] += np.float32(args.baseline_mv)
 
         if comp is not None:
+            # Close the loop: what the operator is burned for also biases
+            # which buttons it can press.
+            dial.set_debt(comp._debt)
             comp_inj = comp.update(heat.levels / 8.0)
             if use_cuda:
                 inj += torch.from_numpy(comp_inj).to("cuda")

@@ -145,6 +145,20 @@ def main() -> int:
         # the divergence itself. Once the dial moves, several chambers are
         # heated over a run, and inferring a single heated chamber from the
         # distances would flag a legitimate multi-chamber run as drift.
+        # Report what each chamber actually got, not just time above a
+        # threshold. A "time above 80%" metric read 0% for a chamber that was
+        # in fact being pressed 21.9% of the time and sitting around 40% heat,
+        # and sent an evening into chasing a stranding that was not happening.
+        hh = data["heat"][:, : len(CHAMBERS)]
+        amp = max(float(hh.max()), 1e-9)
+        log.info("chamber heat: mean / peak / %% of run above half")
+        for ci in range(hh.shape[1]):
+            log.info(
+                "  chamber %d: mean %3.0f%%  peak %3.0f%%  above-half %3.0f%%",
+                ci, hh[:, ci].mean() / amp * 100, hh[:, ci].max() / amp * 100,
+                (hh[:, ci] > amp * 0.5).mean() * 100,
+            )
+
         ever_heated = set(np.flatnonzero(data["heat"].max(axis=0) > 0).tolist())
         strays = [
             i

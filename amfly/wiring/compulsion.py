@@ -92,7 +92,12 @@ class Compulsion:
     # gradient towards the worst one and chamber 2 was never rescued once in
     # three seconds. Debt now keeps climbing, so the longest-ignored chamber
     # always hurts most and eventually has to be answered.
-    escalate_rate: float = 0.00018
+    # 0.0012 saturated in 83ms; 0.00018 grew for the whole run but the bias
+    # it feeds only became competitive with block activity around step 10,000,
+    # by which point the operator's pattern was already set and chambers 2 and
+    # 3 were stranded. This bites inside the first second while still climbing
+    # across a 3s run.
+    escalate_rate: float = 0.0009
     escalate_relief: float = 0.010
     debt_cap: float = 6.0
 

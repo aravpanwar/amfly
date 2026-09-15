@@ -85,6 +85,11 @@ class Dials:
     # fall. Set False for the original tracking behaviour.
     buttons: bool = True
 
+    # How strongly accumulated neglect pulls the operator towards a chamber it
+    # has been ignoring. 0 restores the open loop.
+    debt_bias: float = 1.1
+
+
     # A button is faster to raise than a released level is to fall, so holding
     # a chamber high is possible but only by staying on it.
     press_rate: float = 1.0 / 260.0
@@ -124,6 +129,14 @@ class Dials:
             0.15, 0.85, self.n_blocks, dtype=np.float32
         )
         self._queue: list = []
+        # Set each step by the caller from Compulsion._debt, so the buttons can
+        # see what the operator is being burned for.
+        self._debt_view = np.zeros(self.n_blocks, dtype=np.float64)
+        self._held = np.arange(min(2, self.n_blocks))
+
+    def set_debt(self, debt) -> None:
+        """Tell the buttons which chambers are owed attention."""
+        self._debt_view = np.asarray(debt, dtype=np.float64)[: self.n_blocks]
 
     def _partition(self) -> list:
         """Split the DNs into blocks of comparable synaptic output.
@@ -241,14 +254,43 @@ class Dials:
         # limit is a rule of the piece, not a property of the fly, and the
         # README says so.
         if applied is not None and self.grip and self.grip < self.n_blocks:
-            held = np.argsort(-applied)[: self.grip]
-            gated = np.full_like(applied, -1.0)
-            gated[held] = applied[held]
-            applied = gated
+            # Neglect debt biases WHICH buttons get pressed.
+            #
+            # The operator still chooses by its own activity; debt only tips
+            # which win when they are close. That is what lets a persistently
+            # quiet block still get attention: block 2 fires 11.5% below the
+            # mean as a property of the connectome, so on raw activity alone it
+            # would always be fifth of five. With debt it is held 21.9% of the
+            # time and reaches about 40% heat.
+            #
+            # Select ONCE, here, and let the press below use this decision. An
+            # earlier version ranked again in the press block using a mangled
+            # copy of `applied`, which silently discarded the debt-aware choice
+            # and made debt_bias do nothing at all.
+            score = applied + self.debt_bias * self._debt_view
+            self._held = np.argsort(-score)[: self.grip]
 
         if applied is not None and self.buttons:
-            # Pressed climbs, released falls. No target, no holding position.
-            pressed = applied > 0.0
+            # Pressed climbs, released falls.
+            #
+            # Which buttons are pressed is decided by RANK, not by sign.
+            #
+            # The targets are mean-centred so they sum to about zero, which
+            # means at most one or two can ever be positive and the rest are
+            # pushed negative. Measured on real spikes the five targets were
+            # -0.022, -0.024, -0.232, -0.045, +0.323: only one above zero.
+            # Testing `applied > 0` therefore meant the consistently quietest
+            # block could never press its button at all, whatever the grip,
+            # bias or escalation. Chamber 2 read exactly 0.0 heat in every
+            # configuration because of this line, not because of competition.
+            #
+            # Ranking instead lets the grip decide how many are held, which is
+            # what the grip was always meant to control.
+            if self.grip and self.grip < self.n_blocks:
+                pressed = np.zeros(self.n_blocks, dtype=bool)
+                pressed[self._held] = True
+            else:
+                pressed = applied > np.median(applied)
             delta = np.where(pressed, self.press_rate, -self.release_rate)
             self._levels += delta.astype(np.float32)
             np.clip(self._levels, 0.15, 1.0, out=self._levels)
