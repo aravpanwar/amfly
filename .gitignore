@@ -14,3 +14,6 @@ runs/
 out/
 *.mp4
 *.gif
+
+# Third-party reference code, fetched for study. Not ours to redistribute.
+ref/
