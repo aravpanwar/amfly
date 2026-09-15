@@ -72,7 +72,10 @@ class Dials:
     # maximum 85% of a run and chamber 4 at zero 100% of it, so the plot showed
     # two overlapping lines and three flat ones. 2.5 keeps the five spread
     # across the middle of the range where they stay distinguishable.
-    contrast: float = 2.5
+    # 3.0 with the tracking update gives 75% of the run in motion and nothing
+    # pinned. Under the old integrator no contrast value helped, because the
+    # accumulation saturated regardless.
+    contrast: float = 3.0
 
     history: list = field(default_factory=list, init=False)
 
@@ -210,7 +213,21 @@ class Dials:
             _, applied = self._queue.pop(0)
 
         if applied is not None:
-            self._levels += (applied * self.slew_rate).astype(np.float32)
+            # Move TOWARDS the target, do not accumulate into it.
+            #
+            # This was `self._levels += applied * slew_rate`, an integrator with
+            # no restoring force: a block even slightly above average pushed its
+            # level up every step, and over 30,000 steps those increments always
+            # reached a rail and stayed there. Measured, the five blocks fire
+            # within 1.24x of each other, yet chambers 2 and 4 sat pinned for
+            # 94-98% of a run. A 1.24x input was producing a 100%-vs-0% output.
+            #
+            # Mapping the target to a LEVEL and easing towards it means a
+            # constant input holds a constant level, and only a change in the
+            # operator's activity moves a dial.
+            goal = 0.5 + applied * 0.5          # target in 0..1
+            self._levels += ((goal - self._levels) * self.slew_rate * 40.0
+                             ).astype(np.float32)
             # Floor at 0.15 rather than 0. The premise is that nothing is ever
             # off, and a chamber pinned at absolute zero is both off and a flat
             # line on the plot.
