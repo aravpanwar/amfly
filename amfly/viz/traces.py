@@ -168,3 +168,39 @@ def save(fig: plt.Figure, path: Path, dpi: int = 130) -> Path:
     fig.savefig(path, dpi=dpi, facecolor=BG, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+def dials(heat: np.ndarray, dt_ms: float = 0.1,
+          amplitude_mv: float = 8.0, xmax_ms: float | None = None) -> plt.Figure:
+    """The five dials over time. This is the picture the piece is about.
+
+    Cumulative divergence-from-the-operator bunches: every chamber is heated, so
+    every chamber differs from an unheated reference by a similar amount, and
+    measured the spread between highest and lowest was only 1.17x. The heat
+    levels themselves separate cleanly, and they are what the operator is
+    actually doing.
+    """
+    fig, ax = plt.subplots(figsize=(11, 4))
+    fig.patch.set_facecolor(BG)
+    _style(ax)
+
+    t = np.arange(len(heat)) * dt_ms
+    # Warm palette: hotter chambers read hotter.
+    colors = ["#d94a3d", "#e07a3f", "#c9a227", "#6f9e4c", "#4a7fb5"]
+    order = np.argsort(-heat[-1, : len(CHAMBERS)])
+    for rank, c in enumerate(order):
+        ax.plot(t, heat[:, c] / amplitude_mv * 100.0, lw=1.6,
+                color=colors[rank % len(colors)], label=f"chamber {c}")
+
+    # Headroom above 100 so the legend never sits on top of a pinned line.
+    if xmax_ms is not None:
+        ax.set_xlim(0, xmax_ms)
+    ax.set_ylim(0, 128)
+    ax.set_yticks([0, 25, 50, 75, 100])
+    ax.set_xlabel("ms", color="#888888", fontsize=9)
+    ax.set_ylabel("heat level  (%)", color="#999999", fontsize=9)
+    leg = ax.legend(frameon=False, fontsize=8, ncol=5, loc="upper left")
+    for txt in leg.get_texts():
+        txt.set_color("#999999")
+    fig.tight_layout()
+    return fig

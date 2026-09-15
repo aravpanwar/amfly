@@ -30,27 +30,36 @@ REFERENCE = OPERATOR  # never heated; see amfly/sim/divergence.py
 log = logging.getLogger("amfly.figures")
 
 
-def render_frames(data, out_dir: Path, n_frames: int, dt_ms: float) -> Path:
+def render_frames(data, out_dir: Path, n_frames: int, dt_ms: float,
+                  which: str = "dials") -> Path:
     """Progressive reveal: each frame shows the run up to that point.
 
-    The clip is the traces being drawn, so the viewer watches them separate
-    rather than being handed a finished plot.
+    Defaults to the dial plot rather than the six rate traces. The dials are
+    what separate visibly: every chamber is heated, so cumulative divergence
+    from the unheated operator bunches all five within 1.17x, while the heat
+    levels themselves read as five distinct lines.
     """
     frames = out_dir / "frames"
     frames.mkdir(parents=True, exist_ok=True)
     T = len(data["rates"])
+    heat = data["heat"]
     for i in range(n_frames):
         upto = max(2, int(T * (i + 1) / n_frames))
-        fig = traces.six_traces(
-            data["rates"], data["heat"], data["dial"], dt_ms=dt_ms, upto=upto
-        )
+        if which == "dials":
+            # Hold the full x range so the line grows into a fixed frame
+            # instead of the axis rescaling under it every step.
+            fig = traces.dials(heat[:upto], dt_ms=dt_ms, xmax_ms=T * dt_ms)
+        else:
+            fig = traces.six_traces(
+                data["rates"], heat, data["dial"], dt_ms=dt_ms, upto=upto
+            )
         traces.save(fig, frames / f"f{i:05d}.png", dpi=100)
-        if i % 20 == 0:
+        if i % 40 == 0:
             log.info("  frame %d/%d", i, n_frames)
     return frames
 
 
-def encode(frames: Path, out: Path, fps: int) -> bool:
+def encode(frames: Path, out: Path, fps: int, gif_width: int = 720) -> bool:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         log.warning("ffmpeg not found; skipping mp4 and gif")
@@ -69,14 +78,14 @@ def encode(frames: Path, out: Path, fps: int) -> bool:
     palette = out / "palette.png"
     subprocess.run(
         [ffmpeg, "-y", "-loglevel", "error", "-i", str(mp4),
-         "-vf", "fps=%d,scale=900:-1:flags=lanczos,palettegen" % fps,
+         "-vf", "fps=%d,scale=%d:-1:flags=lanczos,palettegen" % (fps, gif_width),
          str(palette)],
         check=True,
     )
     gif = out / "amfly.gif"
     subprocess.run(
         [ffmpeg, "-y", "-loglevel", "error", "-i", str(mp4), "-i", str(palette),
-         "-lavfi", "fps=%d,scale=900:-1:flags=lanczos [x]; [x][1:v] paletteuse" % fps,
+         "-lavfi", "fps=%d,scale=%d:-1:flags=lanczos [x]; [x][1:v] paletteuse" % (fps, gif_width),
          str(gif)],
         check=True,
     )
@@ -92,6 +101,10 @@ def main() -> int:
     ap.add_argument("--frames", type=int, default=180)
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--stills-only", action="store_true")
+    ap.add_argument("--animate", default="dials", choices=["dials", "traces"],
+                    help="which figure the clip animates")
+    ap.add_argument("--gif-width", type=int, default=720,
+                    help="gif width in px; 48MB at 900px is too big to post")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -106,6 +119,10 @@ def main() -> int:
     fig = traces.six_traces(rates, data["heat"], data["dial"], dt_ms=dt)
     traces.save(fig, args.out / "traces.png")
     log.info("wrote %s", args.out / "traces.png")
+
+    fig = traces.dials(data["heat"], dt_ms=dt)
+    traces.save(fig, args.out / "dials.png")
+    log.info("wrote %s", args.out / "dials.png")
 
     ham = data.get("hamming")
     if ham is not None and len(ham):
@@ -150,8 +167,8 @@ def main() -> int:
         log.warning("no hamming data in run; divergence plot skipped")
 
     if not args.stills_only:
-        frames = render_frames(data, args.out, args.frames, dt)
-        encode(frames, args.out, args.fps)
+        frames = render_frames(data, args.out, args.frames, dt, args.animate)
+        encode(frames, args.out, args.fps, args.gif_width)
 
     return 0
 
