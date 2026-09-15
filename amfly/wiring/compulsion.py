@@ -73,8 +73,33 @@ class Compulsion:
     reward_decay: float = 0.988
     punish_decay: float = 0.9985
 
+    # Habituation: holding the SAME chamber at 100% stops paying. Only a
+    # chamber newly reaching max gives the hit, and a chamber held there
+    # saturates and goes quiet, exactly as a feed does. Without this the
+    # operator finds a stable exploit: measured, by 1,500ms it held chambers 0
+    # and 4 forever, abandoned the other three, and stopped switching
+    # altogether for the remaining half of the run.
+    habituate_rate: float = 0.004
+    habituate_recover: float = 0.0009
+
+    # Escalating neglect: a chamber left at the floor hurts more the longer it
+    # is left. Abandoning the same three forever stops being free, so there is
+    # no configuration it can settle into.
+    # Uncapped, and slow enough to keep growing across a whole run.
+    #
+    # It was 0.0012 with a cap at 1.0, which saturated after 833 steps, 83ms.
+    # Past that every abandoned chamber carried identical debt, so there was no
+    # gradient towards the worst one and chamber 2 was never rescued once in
+    # three seconds. Debt now keeps climbing, so the longest-ignored chamber
+    # always hurts most and eventually has to be answered.
+    escalate_rate: float = 0.00018
+    escalate_relief: float = 0.010
+    debt_cap: float = 6.0
+
     _reward: float = field(default=0.0, init=False)
     _punish: float = field(default=0.0, init=False)
+    _habit: np.ndarray = field(default=None, init=False)
+    _debt: np.ndarray = field(default=None, init=False)
     history: list = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
@@ -83,6 +108,9 @@ class Compulsion:
                 "no dopaminergic neurons resolved; expected PAM/PPL1/PPL2"
             )
         self._buf = np.zeros((self.n_neurons, self.n_instances), dtype=np.float32)
+        # Per-chamber habituation and accumulated neglect.
+        self._habit = np.zeros(len(CHAMBERS), dtype=np.float64)
+        self._debt = np.zeros(len(CHAMBERS), dtype=np.float64)
 
     def update(self, levels: np.ndarray) -> np.ndarray:
         """Chamber levels in, injection for the OPERATOR column out.
@@ -93,18 +121,34 @@ class Compulsion:
         """
         levels = np.asarray(levels, dtype=np.float32)[: len(CHAMBERS)]
 
-        satisfied = int(np.count_nonzero(levels >= REWARD_AT))
-        neglected = int(np.count_nonzero(levels < NEGLECT_BELOW))
+        at_max = levels >= REWARD_AT
+        below = levels < NEGLECT_BELOW
+        satisfied = int(np.count_nonzero(at_max))
+        neglected = int(np.count_nonzero(below))
 
-        # Reward is a pulse on reaching a chamber, not a standing payment.
+        # Habituation. A chamber held at max builds tolerance and pays less
+        # each step; one left alone slowly recovers its value.
+        self._habit[at_max] = np.minimum(1.0, self._habit[at_max] + self.habituate_rate)
+        self._habit[~at_max] = np.maximum(
+            0.0, self._habit[~at_max] - self.habituate_recover
+        )
+        payout = float(np.sum(at_max * (1.0 - self._habit)))
+
         self._reward *= self.reward_decay
-        if satisfied:
-            self._reward = min(1.0, self._reward + 0.35 * satisfied)
+        if payout > 0:
+            self._reward = min(1.0, self._reward + 0.35 * payout)
 
-        # Punishment scales with how many it let slip, and fades slowly.
+        # Escalating neglect. Time at the floor accumulates as debt; attention
+        # pays it down. Abandoning the same chamber forever costs more and more.
+        self._debt[below] = np.minimum(self.debt_cap, self._debt[below] + self.escalate_rate)
+        self._debt[~below] = np.maximum(0.0, self._debt[~below] - self.escalate_relief)
+        # Pain is dominated by the WORST-neglected chamber, not the count, so
+        # the operator is pushed towards whichever it has ignored longest.
+        pain = float(np.sum(below * (0.3 + self._debt)) + 1.5 * self._debt.max())
+
         self._punish *= self.punish_decay
-        if neglected:
-            self._punish = min(1.0, self._punish + 0.02 * neglected)
+        if pain > 0:
+            self._punish = min(1.0, self._punish + 0.02 * pain)
 
         self._buf[:] = 0.0
         if self._reward > 1e-4:
@@ -117,6 +161,7 @@ class Compulsion:
             )
 
         self.history.append((self._reward, self._punish, satisfied, neglected))
+        self._last = (float(self._habit.mean()), float(self._debt.mean()))
         return self._buf
 
     @property
@@ -132,6 +177,8 @@ class Compulsion:
             "mean_punish": float(h[:, 1].mean()) if len(h) else 0.0,
             "steps_with_a_maxed_chamber": int((sat > 0).sum()),
             "mean_neglected_chambers": float(neg.mean()) if len(neg) else 0.0,
+            "final_habituation": float(self._habit.mean()),
+            "final_neglect_debt": float(self._debt.mean()),
         }
 
 

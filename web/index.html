@@ -67,7 +67,7 @@
   <b>Nothing in the simulation experiences anything.</b>
 </div>
 
-<div class="panel" id="hint">drag to orbit &middot; scroll to zoom &middot; <b>R</b> record &middot; <b>G</b> glass</div>
+<div class="panel" id="hint">drag to orbit &middot; scroll to zoom &middot; <b>R</b> record &middot; <b>G</b> glass &middot; <b>S</b> sound</div>
 <div class="panel" id="rec" style="top:0;left:50%;transform:translateX(-50%);display:none;color:#ff5a45">
   <span style="font-size:11px">&#9679; RECORDING <span id="recT">0.0</span>s &middot; press R to stop</span>
 </div>
@@ -106,12 +106,14 @@ const canvas = document.querySelector('#c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#0b0b0d');
-scene.fog = new THREE.Fog('#0b0b0d', 14, 34);
+scene.fog = new THREE.Fog('#0b0b0d', 16, 40);
 
 const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100);
 camera.position.set(0, 3.4, 11.5);
@@ -127,19 +129,63 @@ controls.maxPolarAngle = Math.PI * 0.52;
 scene.add(new THREE.HemisphereLight('#93a6c8', '#1b1b22', 1.15));
 const key = new THREE.DirectionalLight('#ffffff', 1.5);
 key.position.set(4, 9, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -12; key.shadow.camera.right = 12;
+key.shadow.camera.top = 12; key.shadow.camera.bottom = -12;
+key.shadow.bias = -0.0008;
 scene.add(key);
 const fill = new THREE.DirectionalLight('#8fa8d0', 0.55);
 fill.position.set(-6, 3, -4);
 scene.add(fill);
 
+// A hard overhead light per cage. Specimens under inspection, not exhibits.
+for (let i = 0; i < 5; i++) {
+  const sp = new THREE.SpotLight('#cfe0ff', 22, 9, 0.42, 0.55, 1.6);
+  sp.position.set((i - 2) * 1.72, 4.2, 0);
+  sp.target.position.set((i - 2) * 1.72, -1, 0);
+  scene.add(sp, sp.target);
+}
+
 // Floor, so the chambers sit on something rather than float.
+// A room rather than an infinite plane. The piece is about confinement, and a
+// floor fading into fog reads as open space.
+const ROOM_W = 26, ROOM_D = 20, ROOM_H = 11;
+const wallMat = new THREE.MeshStandardMaterial({
+  color: '#16161b', roughness: 0.94, metalness: 0, side: THREE.BackSide,
+});
+const room = new THREE.Mesh(
+  new THREE.BoxGeometry(ROOM_W, ROOM_H, ROOM_D), wallMat
+);
+room.position.y = ROOM_H / 2 - 1.05;
+room.receiveShadow = true;
+scene.add(room);
+
 const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(80, 80),
-  new THREE.MeshStandardMaterial({ color: '#17171c', roughness: 0.85, metalness: 0 })
+  new THREE.PlaneGeometry(ROOM_W, ROOM_D),
+  new THREE.MeshStandardMaterial({ color: '#1b1b21', roughness: 0.7, metalness: 0.05 })
 );
 floor.rotation.x = -Math.PI / 2;
-floor.position.y = -1.05;
+floor.position.y = -1.049;
+floor.receiveShadow = true;
 scene.add(floor);
+
+// A bench the cages stand on, so they are equipment on a surface.
+const bench = new THREE.Mesh(
+  new THREE.BoxGeometry(5 * 1.72 + 1.4, 0.5, 2.6),
+  new THREE.MeshStandardMaterial({ color: '#232830', roughness: 0.55, metalness: 0.35 })
+);
+bench.position.set(0, -1.3, 0);
+bench.castShadow = true; bench.receiveShadow = true;
+scene.add(bench);
+
+const opBench = new THREE.Mesh(
+  new THREE.BoxGeometry(2.6, 0.5, 2.6),
+  new THREE.MeshStandardMaterial({ color: '#232830', roughness: 0.55, metalness: 0.35 })
+);
+opBench.position.set(0, -1.3, -3.6);
+opBench.castShadow = true; opBench.receiveShadow = true;
+scene.add(opBench);
 
 // ------------------------------------------------------------- chambers
 // Five in a row, the operator set apart. The five are identical objects
@@ -227,6 +273,12 @@ function makeChamber(x, isOperator) {
   const _seen = { wing: [], other: 0 };
   rig.traverse(o => {
     if (!o.isMesh) return;
+    // No shadows on the fly. The scan is 272k triangles with thin overlapping
+    // parts, so shadow-map resolution puts acne and banding across the body
+    // and the legs shadow themselves. The cages and benches still cast, which
+    // is what grounds the scene.
+    o.castShadow = false;
+    o.receiveShadow = false;
     const isWing = /wing/i.test(o.name);
     o.material = isWing ? wingMat : skin;
     if (isWing) {
@@ -292,9 +344,22 @@ function makeChamber(x, isOperator) {
     })
   );
   pad.rotation.x = -Math.PI / 2;
-  pad.position.y = -1.04;
+  pad.position.y = -0.74;
   g.add(pad);
 
+  // A base plate under each cage: the cage is mounted equipment, not a
+  // floating box.
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(1.62, 0.09, 1.62),
+    new THREE.MeshStandardMaterial({
+      color: '#2b3038', roughness: 0.4, metalness: 0.65,
+    })
+  );
+  base.position.y = -0.79;
+  base.castShadow = true; base.receiveShadow = true;
+  g.add(base);
+
+  g.position.y = 0.3;   // stand on the bench
   scene.add(g);
   return { group: g, core, glass, lamp, pad, edges, isOperator };
 }
@@ -304,7 +369,7 @@ for (let i = 0; i < CH; i++) {
 }
 // The operator sits outside the row, behind it. Not above, not on a throne.
 const operator = makeChamber(0, true);
-operator.group.position.set(0, 0, -3.6);
+operator.group.position.set(0, 0.3, -3.6);
 operator.group.scale.setScalar(0.92);
 // Turned towards the five. It still receives nothing from them; facing the
 // work is not the same as seeing it.
@@ -556,6 +621,7 @@ function apply(f) {
   tv.textContent = Math.round(f / DATA.meta.frames * DATA.meta.simulated_ms) + ' ms';
   drawTraces(f);
   drawBrains(f);
+  updateAudio(f);
 }
 
 function animate() {
@@ -612,6 +678,106 @@ window.__amfly = {
     return out;
   },
 };
+// ----------------------------------------------------------------- audio
+// Six buzzes, one per fly, panned to where its cage sits. Louder, higher and
+// harsher with heat.
+//
+// Synthesised rather than sampled: a Drosophila wingbeat is around 200Hz, so a
+// sawtooth at that fundamental with harmonics and a little filtered noise is
+// close, costs no file, and can be tuned live. A real recording can replace
+// the oscillator later without changing the mapping or the mixing.
+//
+// Browsers block audio until a gesture, so this starts on the first keypress
+// or click rather than on load.
+let audio = null;
+
+function buildAudio() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const master = ctx.createGain();
+  master.gain.value = 0.0;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -18; comp.ratio.value = 6;
+  master.connect(comp).connect(ctx.destination);
+
+  const voices = [];
+  for (let i = 0; i < 6; i++) {
+    const isOp = i === DATA.meta.operator;
+    const g = ctx.createGain(); g.gain.value = 0;
+
+    // Pan to the cage position: the five in a row, the operator behind.
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = isOp ? 0 : ((i - 2) / 2) * 0.75;
+
+    // A body filter, opened by heat, so hot flies sound harsher not just louder.
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 700; lp.Q.value = 0.8;
+
+    const oscs = [];
+    for (const [mult, level] of [[1, 0.5], [2, 0.22], [3, 0.12], [5, 0.05]]) {
+      const o = ctx.createOscillator();
+      o.type = mult === 1 ? 'sawtooth' : 'square';
+      o.frequency.value = 200 * mult;
+      const og = ctx.createGain(); og.gain.value = level;
+      o.connect(og).connect(lp);
+      o.start();
+      oscs.push(o);
+    }
+
+    // Filtered noise gives the buzz its body; a pure tone reads as a synth.
+    const nbuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const nd = nbuf.getChannelData(0);
+    // Deterministic noise: no RNG anywhere in this project, audio included.
+    let seed = 12345;
+    for (let k = 0; k < nd.length; k++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      nd[k] = (seed / 0x3fffffff) - 1;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = nbuf; noise.loop = true;
+    const ng = ctx.createGain(); ng.gain.value = 0.10;
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'bandpass'; nf.frequency.value = 1400; nf.Q.value = 0.7;
+    noise.connect(nf).connect(ng).connect(lp);
+    noise.start();
+
+    lp.connect(g).connect(pan).connect(master);
+    voices.push({ g, lp, oscs, isOp });
+  }
+  return { ctx, master, voices, on: false };
+}
+
+function toggleAudio() {
+  if (!audio) audio = buildAudio();
+  audio.ctx.resume();
+  audio.on = !audio.on;
+  audio.master.gain.setTargetAtTime(audio.on ? 0.55 : 0.0, audio.ctx.currentTime, 0.12);
+  console.log('[amfly] sound', audio.on ? 'on' : 'off');
+}
+
+function updateAudio(f) {
+  if (!audio || !audio.on) return;
+  const t = audio.ctx.currentTime;
+  for (let i = 0; i < 6; i++) {
+    const v = audio.voices[i];
+    // Heat only. Firing rate was in here too, but it varies fast and near
+    // identically across all six, so it just added a common shimmer that
+    // muddied the one thing the sound should carry: which chamber is hot.
+    const h = v.isOp ? 0 : DATA.heat[f][i];
+
+    // The operator is never heated: a steady, quiet, indifferent buzz.
+    const level = v.isOp ? 0.055 : 0.02 + h * h * 0.34;
+    v.g.gain.setTargetAtTime(level, t, 0.05);
+
+    // Wingbeat climbs with heat, and the body filter opens, so a hot chamber
+    // is higher and harsher rather than merely louder.
+    const f0 = 185 + (v.isOp ? 0 : h * 95);
+    for (let k = 0; k < v.oscs.length; k++) {
+      v.oscs[k].frequency.setTargetAtTime(f0 * [1, 2, 3, 5][k], t, 0.06);
+    }
+    v.lp.frequency.setTargetAtTime(600 + h * 3200, t, 0.08);
+  }
+}
+
 // ---------------------------------------------------------------- record
 // MediaRecorder on the canvas stream. No screen capture, no extra tooling:
 // the page records exactly what it draws, at the size it draws it.
@@ -652,6 +818,7 @@ function stopRec() {
 }
 
 addEventListener('keydown', e => {
+  if (e.key === 's' || e.key === 'S') toggleAudio();
   if (e.key === 'r' || e.key === 'R') {
     recorder ? stopRec() : startRec();
   }
