@@ -92,8 +92,10 @@ class Dials:
 
     # A button is faster to raise than a released level is to fall, so holding
     # a chamber high is possible but only by staying on it.
-    press_rate: float = 1.0 / 260.0
-    release_rate: float = 1.0 / 900.0
+    # Slower than the 1/260 and 1/900 used before, so the rise and fall are
+    # themselves visible rather than instantaneous jumps between rails.
+    press_rate: float = 1.0 / 900.0
+    release_rate: float = 1.0 / 2200.0
 
     history: list = field(default_factory=list, init=False)
 
@@ -186,6 +188,23 @@ class Dials:
         """(n_blocks,) heat level per chamber, each in 0..1."""
         return self._levels.copy()
 
+    # Minimum steps between re-deciding which buttons are held.
+    #
+    # Without this the operator re-chose every step, 1720 changes per second,
+    # while a press needs 26ms to raise a chamber. No press ever completed, so
+    # the chambers that were not dominant just vibrated around mid-range and
+    # the plot became a band of noise instead of legible strokes.
+    #
+    # This is not the old commitment, which held a slot until a chamber was
+    # maxed and locked the quietest block out entirely. It only sets how often
+    # the choice is revisited.
+    # 300 steps, 30ms, gave 83 button transitions per second: about 250
+    # strokes across a 3s plot, roughly 5px each and unreadable. A legible
+    # clip wants 5 to 10 per second. 3000 steps is 300ms per decision, and
+    # since a press lands in 26ms the chamber then simply sits held, which is
+    # what "the operator is holding this one" should look like.
+    decide_every: int = 3000
+
     def update(self, spikes: np.ndarray, step: int) -> np.ndarray:
         """One step of operator spikes in, five heat levels out.
 
@@ -268,7 +287,11 @@ class Dials:
             # copy of `applied`, which silently discarded the debt-aware choice
             # and made debt_bias do nothing at all.
             score = applied + self.debt_bias * self._debt_view
-            self._held = np.argsort(-score)[: self.grip]
+            # Re-decide on a cadence, not every step.
+            if step % self.decide_every != 0:
+                score = None
+            if score is not None:
+                self._held = np.argsort(-score)[: self.grip]
 
         if applied is not None and self.buttons:
             # Pressed climbs, released falls.
