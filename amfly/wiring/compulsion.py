@@ -96,6 +96,11 @@ class Compulsion:
     escalate_relief: float = 0.010
     debt_cap: float = 6.0
 
+    # Punishment at which the operator feels half the maximum heat. The curve
+    # is severity = p / (p + half), so it approaches punish_mv without ever
+    # exceeding it.
+    punish_half: float = 6.0
+
     _reward: float = field(default=0.0, init=False)
     _punish: float = field(default=0.0, init=False)
     _habit: np.ndarray = field(default=None, init=False)
@@ -146,9 +151,30 @@ class Compulsion:
         # the operator is pushed towards whichever it has ignored longest.
         pain = float(np.sum(below * (0.3 + self._debt)) + 1.5 * self._debt.max())
 
-        self._punish *= self.punish_decay
-        if pain > 0:
-            self._punish = min(1.0, self._punish + 0.02 * pain)
+        # Punishment is NOT clamped to 1.0.
+        #
+        # Uncapping the debt was not enough: _punish was still clamped, and it
+        # reached that ceiling within 100 steps. Measured, pain climbed from
+        # 0.98 to 25.20 across a run while the injected punishment sat flat at
+        # 1.0, so every bit of the escalation was invisible to the operator and
+        # it settled on two chambers exactly as before.
+        #
+        # The ceiling is now high enough that escalation is felt for the whole
+        # run, and the injection below is scaled so early punishment is not
+        # overwhelming.
+        # TRACK the pain, do not accumulate towards a ceiling.
+        #
+        # This is the same mistake as the dials, and I made it twice here
+        # before seeing it. First the debt capped at 1.0 after 83ms. Raising
+        # that cap did not help, because _punish then accumulated to ITS cap
+        # within 2,000 steps and sat there. Any accumulate-and-clamp scheme
+        # saturates; the ceiling only decides when.
+        #
+        # Easing towards the current pain means punishment always reflects how
+        # bad things are right now, so escalating debt is felt for the whole
+        # run however long it goes.
+        self._punish += (pain - self._punish) * (1.0 - self.punish_decay) * 8.0
+        self._punish = max(0.0, self._punish)
 
         self._buf[:] = 0.0
         if self._reward > 1e-4:
@@ -156,9 +182,19 @@ class Compulsion:
                 self._reward * self.reward_mv
             )
         if self._punish > 1e-4:
-            self._buf[self.thermo_indices, OPERATOR] += (
-                self._punish * self.punish_mv
-            )
+            # Compressed, not linear.
+            #
+            # _punish now grows without bound, which is what makes escalation
+            # felt, but injecting it directly gave 25mV by the end of a run:
+            # three times what any chamber receives, and past the point where
+            # thermoreceptors saturate anyway, so the excess did nothing except
+            # look alarming in the logs.
+            #
+            # A saturating curve keeps early neglect mild and sustained neglect
+            # severe while staying inside the range the cells can actually
+            # respond to.
+            severity = self._punish / (self._punish + self.punish_half)
+            self._buf[self.thermo_indices, OPERATOR] += severity * self.punish_mv
 
         self.history.append((self._reward, self._punish, satisfied, neglected))
         self._last = (float(self._habit.mean()), float(self._debt.mean()))

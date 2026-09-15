@@ -196,3 +196,41 @@ def test_resolve_reward_neurons_matches_prefixes_only():
     idx = resolve_reward_neurons(types)
     assert set(idx.tolist()) == {0, 1, 2, 3}
     assert 4 not in idx and 5 not in idx, "matched a non-dopaminergic type"
+
+
+def test_punishment_itself_keeps_escalating():
+    """The same bug twice, in two different places.
+
+    First the debt capped at 1.0 after 83ms. That was fixed, and then _punish
+    was still clamped to 1.0 and reached it within 100 steps, so the growing
+    debt was invisible to the operator: pain climbed from 0.98 to 25.20 across
+    a run while the injected punishment sat flat.
+
+    A ceiling anywhere in this chain hides everything below it.
+    """
+    c = _comp()
+    lv = np.array([1, 1, 0, 0, 0], dtype=np.float32)
+    for _ in range(2000):
+        c.update(lv)
+    early = c.state[1]
+    for _ in range(20000):
+        c.update(lv)
+    late = c.state[1]
+    assert late > early * 1.3, (
+        f"punishment stopped escalating: {early:.3f} -> {late:.3f}. "
+        "Sustained neglect must keep getting worse or the operator can "
+        "settle and ignore the same chambers forever."
+    )
+
+
+def test_injected_punishment_grows_with_sustained_neglect():
+    """What the operator's neurons actually receive, not the internal scalar."""
+    c = _comp()
+    lv = np.array([1, 1, 0, 0, 0], dtype=np.float32)
+    for _ in range(2000):
+        inj = c.update(lv)
+    early = float(inj[THERMO_IDX, OPERATOR].mean())
+    for _ in range(20000):
+        inj = c.update(lv)
+    late = float(inj[THERMO_IDX, OPERATOR].mean())
+    assert late > early, f"injected heat did not grow: {early:.3f} -> {late:.3f}"
