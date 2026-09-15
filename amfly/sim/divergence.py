@@ -74,3 +74,21 @@ class Divergence:
 def spike_identity_distance(a: np.ndarray, b: np.ndarray) -> int:
     """Neurons that fired in exactly one of the two. Zero means same program."""
     return int(np.count_nonzero(a ^ b))
+
+
+def windowed(hamming: np.ndarray, window: int = 5000) -> np.ndarray:
+    """Trailing-window distance instead of cumulative from step 0.
+
+    Cumulative distance is dominated by whatever happened first. In run dials3
+    all five chambers spent the opening 1,250 steps at nearly the same heat and
+    accumulated near-identical divergence, and that shared history then swamped
+    the real separation that followed. A trailing window forgets it.
+
+    Returns (T, n_instances): at each step, the distance accumulated over the
+    preceding `window` steps.
+    """
+    h = np.asarray(hamming, dtype=np.int64)
+    cum = np.cumsum(h, axis=0)
+    out = cum.copy()
+    out[window:] = cum[window:] - cum[:-window]
+    return out
