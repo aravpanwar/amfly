@@ -1,0 +1,614 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>amfly</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0b0b0d;
+    color: #d8d8d8;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow: hidden;
+  }
+  #c { display: block; width: 100vw; height: 100vh; }
+  .panel {
+    position: fixed; padding: 14px 16px; pointer-events: none;
+    text-shadow: 0 1px 3px #000;
+  }
+  #title { top: 0; left: 0; }
+  #title h1 { font-size: 15px; font-weight: 600; letter-spacing: .14em; }
+  #title .sub { color: #6e6e74; font-size: 11px; margin-top: 3px; }
+  #readout { top: 62px; left: 0; text-align: left; font-size: 11px; color: #8a8a90; }
+  #readout .row { display: flex; gap: 10px; justify-content: flex-start; width: 150px; }
+  #readout .k { color: #5c5c62; }
+  #footer { bottom: 0; left: 0; color: #5c5c62; font-size: 10.5px; max-width: 46ch; }
+  #footer b { color: #8a8a90; font-weight: 500; }
+  #hint { bottom: 0; right: 0; color: #4a4a50; font-size: 10.5px; }
+  #traces {
+    position: fixed; left: 14px; bottom: 74px; pointer-events: none;
+  }
+  /* Brain tiles: a 2x3 block, so the six are compared at a glance. */
+  #brains {
+    position: fixed; right: 14px; top: 50%; transform: translateY(-50%);
+    display: grid; grid-template-columns: repeat(2, auto); gap: 8px 10px;
+    pointer-events: none;
+  }
+  #brains .blab {
+    font-size: 9.5px; color: #5c5c62; letter-spacing: .04em; margin-bottom: 2px;
+  }
+  #brains canvas {
+    display: block; background: #0e0e12; border: 1px solid #1e1e26;
+  }
+  #traces .t { margin-bottom: 7px; }
+  #traces .lab {
+    font-size: 9.5px; color: #5c5c62; letter-spacing: .04em;
+    display: flex; justify-content: space-between; width: 190px;
+    margin-bottom: 1px;
+  }
+  #traces canvas { display: block; background: #101014; border-left: 1px solid #23232a; }
+</style>
+
+<canvas id="c"></canvas>
+
+<div class="panel" id="title">
+  <h1>AMFLY</h1>
+  <div class="sub">nomouth</div>
+</div>
+
+<div class="panel" id="readout"><div id="rows"></div></div>
+
+<div id="traces"></div>
+<div id="brains"></div>
+
+<div class="panel" id="footer">
+  Six instances of one connectome. Five in chambers, one outside at a dial.<br>
+  The operator sets how much heat each chamber gets. It never sees them.<br>
+  <b>Nothing in the simulation experiences anything.</b>
+</div>
+
+<div class="panel" id="hint">drag to orbit &middot; scroll to zoom</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const DATA = await (await fetch('./data.json')).json();
+
+// The Janelia/DeepMind flybody scan, Apache-2.0, converted from the MJCF
+// visual meshes. 85 meshes, 153 named nodes, so legs and wings are addressable
+// by name instead of being primitives I posed by hand.
+const FLY = (await new GLTFLoader().loadAsync('./flybody.glb')).scene;
+
+// Soma point cloud. One dot per cell body at its real neuPrint coordinate,
+// the same technique every other project uses: nobody renders neuron arbors,
+// they would be millions of segments and would read as fog.
+const BMETA = await (await fetch('./brain.json')).json();
+const BBUF = await (await fetch('./brain.bin')).arrayBuffer();
+const B_POS = new Float32Array(BBUF, 0, BMETA.points * 3);
+const B_LIVE = new Uint32Array(BBUF, BMETA.position_bytes, BMETA.live);
+const B_ACT = new Uint8Array(BBUF, BMETA.position_bytes + BMETA.live_bytes);
+const CH = DATA.meta.chambers.length;
+
+// ---------------------------------------------------------------- scene
+const canvas = document.querySelector('#c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0b0b0d');
+scene.fog = new THREE.Fog('#0b0b0d', 14, 34);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 3.4, 11.5);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.target.set(0, 0.5, 0);
+controls.minDistance = 4;
+controls.maxDistance = 22;
+controls.maxPolarAngle = Math.PI * 0.52;
+
+scene.add(new THREE.HemisphereLight('#93a6c8', '#1b1b22', 1.15));
+const key = new THREE.DirectionalLight('#ffffff', 1.5);
+key.position.set(4, 9, 6);
+scene.add(key);
+const fill = new THREE.DirectionalLight('#8fa8d0', 0.55);
+fill.position.set(-6, 3, -4);
+scene.add(fill);
+
+// Floor, so the chambers sit on something rather than float.
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(80, 80),
+  new THREE.MeshStandardMaterial({ color: '#17171c', roughness: 0.85, metalness: 0 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -1.05;
+scene.add(floor);
+
+// ------------------------------------------------------------- chambers
+// Five in a row, the operator set apart. The five are identical objects
+// because the five instances are identical programs.
+const SPACING = 1.72;
+const chambers = [];
+
+function makeChamber(x, isOperator) {
+  const g = new THREE.Group();
+  g.position.x = x;
+
+  // Plain alpha, NOT transmission.
+  //
+  // transmission:0.55 renders the glass in a separate pass that samples the
+  // scene behind it, and transparent objects inside that volume are dropped
+  // from what the pass captures. The wings are transparent and sit inside the
+  // box, so they were invisible through the glass and fine with it hidden.
+  // Confirmed by toggling the glass off: the wings appeared immediately.
+  //
+  // Also render the glass last and skip depth writes, so it never occludes
+  // what is inside it.
+  const glass = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 1.5, 1.5),
+    new THREE.MeshStandardMaterial({
+      color: '#9fb0c6', transparent: true, opacity: 0.055,
+      roughness: 0.2, metalness: 0,
+      side: THREE.DoubleSide, depthWrite: false,
+    })
+  );
+  glass.renderOrder = 10;
+  g.add(glass);
+
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(1.5, 1.5, 1.5)),
+    new THREE.LineBasicMaterial({
+      color: isOperator ? '#6d9bd4' : '#555d6e', transparent: true, opacity: 0.9,
+    })
+  );
+  g.add(edges);
+
+  // A clone of the real scan per chamber. Cloning shares geometry, so six
+  // flies cost one upload. Materials are cloned per fly because each chamber
+  // is tinted by its own heat level.
+  // The scan is Z-up with +X forward (head at x=+0.057, abdomen at x=-0.045;
+  // wings separate along Y at +/-0.043). Three.js is Y-up with -Z forward, so
+  // without this the flies face sideways and the wings lie edge-on to the
+  // camera and disappear. Wrap the clone in a group that does the conversion
+  // once, rather than fighting it joint by joint.
+  const core = new THREE.Group();
+  const rig = FLY.clone(true);
+  // Exact basis change, solved rather than guessed. Chasing Euler signs by
+  // eye produced, in order: facing west, banking like an aircraft, looking up,
+  // then looking down.
+  //
+  // The model is ALREADY Y-up: +X forward, +Y up, +Z left. The node
+  // translations misled me, since wing_left/wing_right separate along Y at
+  // +/-0.043, which looked like a left-right axis but is the wing hinge
+  // height. Assuming Z-up meant tilting a model that needed no tilt, which is
+  // where the 90 degree bank came from.
+  //
+  // So the only correction needed is yaw: +X forward -> -Z forward.
+  rig.rotation.y = Math.PI / 2;
+  core.add(rig);
+  const skin = new THREE.MeshStandardMaterial({
+    color: '#2a2a30',
+    emissive: new THREE.Color(isOperator ? '#3d6ea8' : '#1a1a1e'),
+    emissiveIntensity: 1, roughness: 0.55, metalness: 0.12,
+  });
+  // Plain alpha, not transmission. MeshPhysicalMaterial with transmission
+  // renders in a separate pass that does not respect transparent + DoubleSide
+  // together, so each wing was visible from one side only: from the left you
+  // saw the right wing and vice versa. depthWrite off stops the near wing
+  // occluding the far one.
+  // DoubleSide so a wing is visible from either side, depthWrite ON so they do
+  // not vanish into the dark background, and emissive so they read against it
+  // without depending on a light happening to catch them. depthWrite:false
+  // made them disappear entirely; transmission made each visible from one
+  // side only.
+  const wingMat = new THREE.MeshStandardMaterial({
+    color: '#cfe0f5', transparent: true, opacity: 0.55,
+    roughness: 0.3, metalness: 0,
+    emissive: new THREE.Color('#6d86ab'), emissiveIntensity: 0.55,
+    side: THREE.DoubleSide, depthWrite: true,
+  });
+  const _seen = { wing: [], other: 0 };
+  rig.traverse(o => {
+    if (!o.isMesh) return;
+    const isWing = /wing/i.test(o.name);
+    o.material = isWing ? wingMat : skin;
+    if (isWing) {
+      o.visible = true;
+      o.frustumCulled = false;
+      o.renderOrder = 2;
+      _seen.wing.push(o.name);
+    } else _seen.other++;
+  });
+  if (!window.__wingReport) {
+    window.__wingReport = _seen;
+    console.log('[amfly] wing meshes found:', _seen.wing, 'other meshes:', _seen.other);
+  }
+  core.material = skin;  // apply() drives this one material
+
+  // Scale to fill most of the 1.5 cage, then STAND it on the floor rather
+  // than centring it. Centring left the flies hovering mid-cage, which reads
+  // as floating in a vitrine; a fly resting on the floor of a sealed box reads
+  // as confined.
+  //
+  // Centre horizontally but align the bounding box's bottom to the cage floor,
+  // so the legs meet the ground rather than the body's centre sitting at it.
+  const box = new THREE.Box3().setFromObject(rig);
+  const span = Math.max(...box.getSize(new THREE.Vector3()).toArray());
+  const baseScale = 1.25 / span;
+  core.scale.setScalar(baseScale);
+
+  const b2 = new THREE.Box3().setFromObject(rig);
+  const ctr = b2.getCenter(new THREE.Vector3());
+  rig.position.x -= ctr.x;
+  rig.position.z -= ctr.z;
+  // Cage interior floor sits at -0.75 in group space (box is 1.5 tall).
+  rig.position.y -= b2.min.y + 0.75 / baseScale;
+
+  const wings = [];
+  for (const side of ['left', 'right']) {
+    const w = rig.getObjectByName(`wing_${side}`);
+    if (w) wings.push({ pivot: w, base: w.rotation.clone(), sx: side === 'left' ? 1 : -1 });
+  }
+  const legs = [];
+  for (const seg of ['femur', 'tibia']) {
+    for (const t of ['T1', 'T2', 'T3']) {
+      for (const side of ['left', 'right']) {
+        const l = rig.getObjectByName(`${seg}_${t}_${side}`);
+        if (l) legs.push({ mesh: l, base: l.rotation.clone(), sx: side === 'left' ? 1 : -1 });
+      }
+    }
+  }
+
+  core.userData = { wings, legs, skin, baseScale };
+  g.add(core);
+
+  // A light inside the box, so heat spills onto the neighbours.
+  const lamp = new THREE.PointLight(isOperator ? '#5590d8' : '#ff5a33', 0, 5.5, 2);
+  g.add(lamp);
+
+  // Floor pad: reads the level from across the room, even at a glance.
+  const pad = new THREE.Mesh(
+    new THREE.CircleGeometry(0.95, 48),
+    new THREE.MeshBasicMaterial({
+      color: isOperator ? '#2a4a72' : '#3a1410',
+      transparent: true, opacity: 0.55,
+    })
+  );
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.y = -1.04;
+  g.add(pad);
+
+  scene.add(g);
+  return { group: g, core, glass, lamp, pad, edges, isOperator };
+}
+
+for (let i = 0; i < CH; i++) {
+  chambers.push(makeChamber((i - (CH - 1) / 2) * SPACING, false));
+}
+// The operator sits outside the row, behind it. Not above, not on a throne.
+const operator = makeChamber(0, true);
+operator.group.position.set(0, 0, -3.6);
+operator.group.scale.setScalar(0.92);
+// Turned towards the five. It still receives nothing from them; facing the
+// work is not the same as seeing it.
+operator.group.rotation.y = Math.PI;
+
+// ------------------------------------------------------------- readout
+const rows = document.querySelector('#rows');
+const labels = [];
+for (let i = 0; i < CH; i++) {
+  const el = document.createElement('div');
+  el.className = 'row';
+  el.innerHTML = `<span class="k">chamber ${i}</span><span class="v">0%</span>`;
+  rows.appendChild(el);
+  labels.push(el.querySelector('.v'));
+}
+const opRow = document.createElement('div');
+opRow.className = 'row';
+opRow.style.marginTop = '6px';
+opRow.innerHTML = `<span class="k">operator</span><span class="v" style="color:#5590d8">at the dial</span>`;
+rows.appendChild(opRow);
+
+const timeRow = document.createElement('div');
+timeRow.className = 'row';
+timeRow.style.marginTop = '10px';
+timeRow.innerHTML = `<span class="k">t</span><span class="v" id="tv">0 ms</span>`;
+rows.appendChild(timeRow);
+const tv = document.querySelector('#tv');
+
+// -------------------------------------------------------------- traces
+// A firing-rate trace per instance, beside the chambers. This is the same
+// array the 2D figures plot; the scene shows what is done to each fly and the
+// traces show the brain responding to it.
+const TRACE_W = 190, TRACE_H = 26, TRACE_SPAN = 240;  // frames of history
+const traceBox = document.querySelector('#traces');
+const traceCtx = [];
+for (let i = 0; i < 6; i++) {
+  const isOp = i === DATA.meta.operator;
+  const wrap = document.createElement('div');
+  wrap.className = 't';
+  const lab = document.createElement('div');
+  lab.className = 'lab';
+  lab.innerHTML = `<span>${isOp ? 'operator' : 'chamber ' + i}</span><span class="hz"></span>`;
+  if (isOp) { wrap.style.marginTop = '10px'; lab.style.color = '#4a6f9e'; }
+  const cv = document.createElement('canvas');
+  cv.width = TRACE_W * 2; cv.height = TRACE_H * 2;
+  cv.style.width = TRACE_W + 'px'; cv.style.height = TRACE_H + 'px';
+  wrap.append(lab, cv);
+  traceBox.appendChild(wrap);
+  const ctx = cv.getContext('2d');
+  ctx.scale(2, 2);
+  traceCtx.push({ ctx, hz: lab.querySelector('.hz'), isOp });
+}
+
+function drawTraces(f) {
+  const a = Math.max(0, f - TRACE_SPAN);
+  for (let i = 0; i < 6; i++) {
+    const { ctx, hz, isOp } = traceCtx[i];
+    ctx.clearRect(0, 0, TRACE_W, TRACE_H);
+    const h = isOp ? 0 : DATA.heat[f][i];
+
+    // Tint the panel by the chamber's heat, so the trace and the cage agree.
+    if (!isOp && h > 0.01) {
+      ramp(h, tmp);
+      ctx.fillStyle = `rgba(${(tmp.r*255)|0},${(tmp.g*255)|0},${(tmp.b*255)|0},${0.10 + h * 0.20})`;
+      ctx.fillRect(0, 0, TRACE_W, TRACE_H);
+    }
+
+    ctx.beginPath();
+    for (let k = a; k <= f; k++) {
+      const x = ((k - a) / TRACE_SPAN) * TRACE_W;
+      const y = TRACE_H - 1 - DATA.rates[k][i] * (TRACE_H - 2);
+      k === a ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = isOp ? '#6d9bd4' : (h > 0.5 ? '#ff7a45' : '#9aa0aa');
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    hz.textContent = Math.round(DATA.rates[f][i] * 100) + '';
+  }
+}
+
+// --------------------------------------------------------------- brains
+// Six brain tiles in the side dashboard, not floating in the scene. Each is a
+// fixed projection of the same 24,000 soma positions, so the six are directly
+// comparable: the same neuron sits at the same pixel in every tile.
+const BRAIN_W = 190, BRAIN_H = 118;
+const brainBox = document.querySelector('#brains');
+const brainTiles = [];
+
+// Project once. The cloud is centred and unit-scaled by the exporter; take the
+// XZ plane, which is the dorsal view, and flip Y so anterior reads upward.
+const PX = new Float32Array(BMETA.points), PY = new Float32Array(BMETA.points);
+{
+  let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+  for (let i = 0; i < BMETA.points; i++) {
+    const x = B_POS[i * 3], y = B_POS[i * 3 + 2];
+    PX[i] = x; PY[i] = y;
+    if (x < minx) minx = x; if (x > maxx) maxx = x;
+    if (y < miny) miny = y; if (y > maxy) maxy = y;
+  }
+  const sx = (BRAIN_W - 10) / (maxx - minx), sy = (BRAIN_H - 10) / (maxy - miny);
+  const sc = Math.min(sx, sy);
+  for (let i = 0; i < BMETA.points; i++) {
+    PX[i] = 5 + (PX[i] - minx) * sc + (BRAIN_W - 10 - (maxx - minx) * sc) / 2;
+    PY[i] = BRAIN_H - 5 - (PY[i] - miny) * sc;
+  }
+}
+
+for (let i = 0; i < 6; i++) {
+  const isOp = i === DATA.meta.operator;
+  const wrap = document.createElement('div');
+  wrap.className = 'b';
+  const lab = document.createElement('div');
+  lab.className = 'blab';
+  lab.textContent = isOp ? 'operator' : 'chamber ' + i;
+  if (isOp) lab.style.color = '#6d9bd4';
+  const cv = document.createElement('canvas');
+  cv.width = BRAIN_W * 2; cv.height = BRAIN_H * 2;
+  cv.style.width = BRAIN_W + 'px'; cv.style.height = BRAIN_H + 'px';
+  wrap.append(lab, cv);
+  brainBox.appendChild(wrap);
+  const ctx = cv.getContext('2d');
+  ctx.scale(2, 2);
+  brainTiles.push({ ctx, isOp });
+}
+
+// The resting cloud is the same every frame, so draw it once and reuse it.
+const restCanvas = document.createElement('canvas');
+restCanvas.width = BRAIN_W * 2; restCanvas.height = BRAIN_H * 2;
+{
+  const rc = restCanvas.getContext('2d');
+  rc.scale(2, 2);
+  rc.fillStyle = '#23252c';
+  for (let i = 0; i < BMETA.points; i++) rc.fillRect(PX[i], PY[i], 1, 1);
+}
+
+function drawBrains(f) {
+  const stride = BMETA.live;
+  for (let i = 0; i < 6; i++) {
+    const { ctx, isOp } = brainTiles[i];
+    ctx.clearRect(0, 0, BRAIN_W, BRAIN_H);
+    ctx.drawImage(restCanvas, 0, 0, BRAIN_W, BRAIN_H);
+
+    const off = (f * 6 + i) * stride;
+    for (let k = 0; k < stride; k++) {
+      const a = B_ACT[off + k] / 255;
+      if (a <= 0) continue;
+      const p = B_LIVE[k];
+      ctx.fillStyle = isOp
+        ? `rgba(110,170,255,${0.35 + a * 0.65})`
+        : `rgba(255,${(90 + a * 90) | 0},60,${0.35 + a * 0.65})`;
+      const r = 1 + a * 2;
+      ctx.fillRect(PX[p] - r / 2, PY[p] - r / 2, r, r);
+    }
+  }
+}
+
+// ------------------------------------------------------------- playback
+// Heat ramp. The first version lerped one cold colour to one hot one, which
+// put deep red at 15% and orange at 100%: the coldest chambers looked the most
+// alarming. A real thermal ramp runs dark -> red -> orange -> white.
+const RAMP = [
+  { t: 0.00, c: new THREE.Color('#171012') },
+  { t: 0.30, c: new THREE.Color('#4a1109') },
+  { t: 0.60, c: new THREE.Color('#9e2408') },
+  { t: 0.85, c: new THREE.Color('#d83c0b') },
+  { t: 1.00, c: new THREE.Color('#ff5a18') },
+];
+const tmp = new THREE.Color();
+function ramp(h, out) {
+  h = Math.max(0, Math.min(1, h));
+  for (let i = 1; i < RAMP.length; i++) {
+    if (h <= RAMP[i].t) {
+      const a = RAMP[i - 1], b = RAMP[i];
+      return out.copy(a.c).lerp(b.c, (h - a.t) / (b.t - a.t));
+    }
+  }
+  return out.copy(RAMP[RAMP.length - 1].c);
+}
+let frame = 0;
+const start = performance.now();
+
+let time = 0;
+function apply(f) {
+  const heat = DATA.heat[f];
+  const rates = DATA.rates[f];
+
+  for (let i = 0; i < CH; i++) {
+    const h = heat[i];
+    const c = chambers[i];
+
+    ramp(h, tmp);
+    c.core.material.emissive.copy(tmp);
+    c.core.material.color.copy(tmp).multiplyScalar(0.22).addScalar(0.03);
+    c.core.material.emissiveIntensity = 0.12 + h * 0.85;
+    c.lamp.color.copy(tmp);
+
+    // Hotter chambers twitch harder. This is an authored visual gain on a
+    // real signal: heat moves motor-neuron firing by about 3% (measured), and
+    // that is stated in the README rather than passed off as raw output.
+    const tw = h * h;
+    for (let k = 0; k < c.core.userData.legs.length; k++) {
+      const L = c.core.userData.legs[k];
+      L.mesh.rotation.z = L.base.z + Math.sin(time * (5 + tw * 13) + k * 1.7) * (0.01 + tw * 0.22);
+      L.mesh.rotation.x = L.base.x + Math.cos(time * (4 + tw * 9) + k) * (0.008 + tw * 0.12);
+    }
+    // Beat about Z, the hinge. wing_left/right are parent transforms whose own
+    // rotation already places the wing along the body; writing rotation.x
+    // every frame overwrote that placement and folded them flat into the
+    // thorax, which is why they vanished while still being found and shaded.
+    // Offset from the recorded base instead of replacing it.
+    // Both wings beat TOGETHER, in phase. The previous version multiplied the
+    // beat by w.sx to mirror it, but the two wing nodes already carry mirrored
+    // rest orientations from the scan, so the extra sign flip cancelled on one
+    // side and doubled on the other: one wing rose while the other fell, and
+    // they held a straight line through the body.
+    for (const w of c.core.userData.wings) {
+      const beat = Math.sin(time * (7 + tw * 34)) * (0.02 + tw * 0.38);
+      w.pivot.rotation.set(w.base.x, w.base.y, w.base.z + beat);
+    }
+    // Firing rate makes the core breathe, so a chamber is never quite still.
+    // Multiply the fitted scale, do not replace it. Writing an absolute value
+    // here reset every fly to about 1.0 each frame, so changing the fit above
+    // had no visible effect at all.
+    c.core.scale.setScalar(c.core.userData.baseScale * (1 + rates[i] * 0.045));
+
+    c.lamp.intensity = h * 1.9;
+    c.pad.material.opacity = 0.12 + h * 0.34;
+    c.pad.scale.setScalar(0.8 + h * 0.3);
+    c.edges.material.opacity = 0.35 + h * 0.5;
+
+    labels[i].textContent = Math.round(h * 100) + '%';
+    labels[i].style.color = h > 0.5 ? '#ff7a55' : (h > 0.2 ? '#c9a227' : '#6e6e74');
+  }
+
+  // The operator is never heated. Its core tracks its own firing rate only.
+  const opRate = rates[DATA.meta.operator];
+  operator.core.material.emissiveIntensity = 0.5 + opRate * 2.2;
+  operator.core.scale.setScalar(operator.core.userData.baseScale * (1 + opRate * 0.045));
+  for (let k = 0; k < operator.core.userData.legs.length; k++) {
+    const L = operator.core.userData.legs[k];
+    L.mesh.rotation.z = L.base.z + Math.sin(time * 5 + k * 1.7) * 0.015;
+  }
+  for (const w of operator.core.userData.wings) {
+    w.pivot.rotation.set(w.base.x, w.base.y,
+      w.base.z + Math.sin(time * 6) * 0.02);
+  }
+  operator.lamp.intensity = 0.5 + opRate * 1.6;
+
+  tv.textContent = Math.round(f / DATA.meta.frames * DATA.meta.simulated_ms) + ' ms';
+  drawTraces(f);
+  drawBrains(f);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const elapsed = (performance.now() - start) / 1000;
+  time = elapsed;
+  frame = Math.floor(elapsed * DATA.meta.fps) % DATA.meta.frames;
+  apply(frame);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+
+// Debug handle: inspect actual world transforms from the console.
+window.__amfly = {
+  chambers, operator, scene, camera, THREE,
+  // Press G to toggle the glass. Transmissive materials render in a separate
+  // pass that samples the scene behind them, and transparent objects inside
+  // that volume are commonly dropped from what the pass captures.
+  glass(on) {
+    for (const c of chambers.concat([operator])) c.glass.visible = on;
+    return 'glass ' + (on ? 'on' : 'off');
+  },
+  wingInfo() {
+    const c = chambers[0];
+    const out = [];
+    c.core.traverse(o => {
+      if (!o.isMesh || !/wing/i.test(o.name)) return;
+      const wp = new THREE.Vector3(), ws = new THREE.Vector3();
+      o.getWorldPosition(wp); o.getWorldScale(ws);
+      const bb = new THREE.Box3().setFromObject(o);
+      const sz = bb.getSize(new THREE.Vector3());
+      out.push({
+        name: o.name, visible: o.visible,
+        parentVisible: o.parent ? o.parent.visible : null,
+        worldPos: wp.toArray().map(v => +v.toFixed(3)),
+        worldScale: ws.toArray().map(v => +v.toFixed(3)),
+        worldSize: sz.toArray().map(v => +v.toFixed(3)),
+        matOpacity: o.material.opacity, matVisible: o.material.visible,
+      });
+    });
+    return out;
+  },
+};
+addEventListener('keydown', e => {
+  if (e.key === 'g' || e.key === 'G') {
+    const on = !chambers[0].glass.visible;
+    for (const c of chambers.concat([operator])) c.glass.visible = on;
+    console.log('[amfly] glass', on ? 'on' : 'off');
+  }
+});
+animate();
+</script>

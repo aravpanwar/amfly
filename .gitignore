@@ -17,3 +17,12 @@ out/
 
 # Third-party reference code, fetched for study. Not ours to redistribute.
 ref/
+
+# Generated web artifacts. Rebuilt by scripts/export_web.py, export_brain.py
+# and the flybody converter; no reason to carry 25MB in the repo.
+web/data.json
+web/brain.bin
+web/brain.json
+web/flybody.glb
+assets/flybody.glb
+data/soma.npz
