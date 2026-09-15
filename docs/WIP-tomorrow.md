@@ -1,82 +1,60 @@
-# Where this stands, end of 2026-09-14
+# Where this stands
 
-Nothing pushed after commit 56. Two commits are local-only and the contrast fix
-is uncommitted in the working tree, deliberately, so the dates land tomorrow.
+Everything is committed and pushed. 71 commits, tests green, README still blank
+by choice.
 
-## The design changed today
+## The piece changed today, and for the better
 
-The operator no longer picks which chamber is heated. It holds five dials, one
-per chamber, and sets how much each gets, continuously. Nothing is ever off.
+It is no longer an indifferent operator. It is a trapped one. All three of the
+ideas that got it there came from you:
 
-This was the right call for the piece and it also fixed the divergence problem:
-only continuously heated chambers accumulate, and under one switch four chambers
-sat cold at any moment.
+- **Buttons, not dials.** Press and a chamber climbs, release and it falls, and
+  only two can be pressed at once. Nothing achieved stays achieved. This alone
+  took mean reward from 0.03 to 0.94.
+- **Reward only for new maxes.** Holding a chamber builds tolerance and stops
+  paying, exactly as a feed does. Took reward from 0.99 to 0.30 and broke the
+  operator's habit of camping on two chambers forever.
+- **Escalating neglect.** Time at the floor accumulates as debt, so abandoning a
+  chamber is not free.
 
-## Working
+The loop runs through real measured circuits: reward into the 340 dopaminergic
+neurons present in the data (PAM 316, PPL1 16, PPL2 8), punishment into the
+operator's own TRN_VP thermoreceptors, the same 25 cells heated in every
+chamber.
 
-- Five dials driven by five descending-neuron blocks, levels spanning 0 to 100%.
-- Divergence from the operator: 2.98 million, up from 239 when the dials were
-  first wired and 68,464 after the lockstep fix.
-- The operator is exactly 0 in every run. Isolation has never broken.
-- GPU at 15x CPU, both backends byte-identical on this machine.
+## Open: does chamber 2 ever get rescued
 
-## The open bug
+Run `runs/esc` was still going when we stopped. It tests the uncapped debt.
 
-Chambers held at clearly different heat (8.0, 8.0, 0.6, 0.0, 0.0 mV) come out
-nearly identical to each other: full-network Hamming distance from the operator
-reads 1678 for all five, differing by at most 1.
+Check it with:
 
-**This is a bug, not a limit.** A direct test holding five instances at constant
-0/2/4/6/8 mV produced roughly 2,400 differing neurons between them. Same brain,
-same levels, opposite result. So the 25 TRN_VP thermoreceptors are sufficient to
-discriminate heat levels, and something about how the dials deliver that heat is
-not working.
+    python -c "import json,numpy as np; d=json.load(open('runs/esc/provenance.json')); print(d['compulsion'])"
 
-### Diagnostic result: the values are right, the ramp is the problem
+The number that matters is chamber 2's rescue count. It was **2** across three
+seconds, versus 22 for chambers 0 and 3. If it is still near zero, the debt
+needs to grow faster or the worst-chamber weighting needs raising further.
 
-| case | distance from operator |
-|---|---|
-| constant 0..8 mV, 3000 steps | 0, 2361, 2360, 2411, 2622 |
-| constant 0..8 mV, 2000 steps | 0, 1692, 1678, 1703, 1663 |
-| **dials3 final levels held constant** | **1663, 1663, 1342, 0, 0** |
+## Then
 
-The third row uses the dials' own final levels (8.0, 8.0, 0.6, 0.0, 0.0 mV) and
-separates exactly as the piece needs. **So the dial values are correct.** The
-bug is that they arrive gradually.
+1. Export the winning run: `export_web.py`, `export_brain.py`, `make_figures.py`
+2. Reload the scene, record a clip with **R**
+3. The README, which is now genuinely worth writing since the design has settled
 
-Refinement, measured: the dials do reach a full 8 mV spread by step 1250 and
-hold it for the last 64% of the run, so "bunched the whole time" is not right
-either. They start together at 4 mV and take about 1250 steps to separate. All
-five accumulate near-identical divergence during that shared opening, and the
-cumulative total is dominated by it afterwards.
+## To bring the scene up
 
-### Fix to try first
+    cd web && python -m http.server 8777
 
-Start the levels apart rather than all at 4 mV, or raise `slew_rate` so
-separation happens in the first hundred steps instead of the first thousand.
-Starting apart is the cleaner option but needs care: the starting spread must
-still be set by operator activity, not authored, or the piece stops being
-"driven by actual spike activity".
+Keys: **R** record, **G** glass, **S** sound.
 
-A second option is to measure divergence over a trailing window rather than
-cumulatively from step 0, so an early common phase does not swamp the later
-separation. That is a change to the measurement, not the piece, and is probably
-worth doing regardless.
+## Things that must go in the README
 
-## Two things I had wrong today, corrected
-
-- **"The 25 thermoreceptors are too few."** Wrong. The direct test proves they
-  discriminate fine. The fan-out note in negative-results.md is corrected in a
-  later section but the earlier text is still there for the record.
-- **"A settled network absorbs perturbation."** Wrong. A six-regime sweep showed
-  drive changes do nothing and only injection population mattered, and even that
-  conclusion is now superseded by the constant-level test above.
-
-Both are recorded in docs/negative-results.md rather than quietly edited away.
-
-## Next
-
-1. Read the diagnostic result.
-2. Fix the dial delivery bug it points at.
-3. Rerun 3 seconds, check all five chambers separate from each other.
-4. Then render the clip.
+- The two-button limit is a rule of the piece, not a property of the fly
+- The 100% and 50% thresholds are chosen
+- Stimulating PAM is current injected into neurons that participate in
+  reinforcement learning. Nothing here experiences reward and the README must
+  not imply otherwise
+- Chamber starting spread is authored
+- Leg and wing motion is amplified from a real but small signal, about 3%
+- Only some brain points carry per-neuron activity, 3,152 of 24,000
+- project.md chose indifference over cruelty and this reverses that;
+  `--no-compulsion` still runs the original
