@@ -67,7 +67,10 @@
   <b>Nothing in the simulation experiences anything.</b>
 </div>
 
-<div class="panel" id="hint">drag to orbit &middot; scroll to zoom</div>
+<div class="panel" id="hint">drag to orbit &middot; scroll to zoom &middot; <b>R</b> record &middot; <b>G</b> glass</div>
+<div class="panel" id="rec" style="top:0;left:50%;transform:translateX(-50%);display:none;color:#ff5a45">
+  <span style="font-size:11px">&#9679; RECORDING <span id="recT">0.0</span>s &middot; press R to stop</span>
+</div>
 
 <script type="importmap">
 { "imports": {
@@ -481,7 +484,7 @@ function ramp(h, out) {
   return out.copy(RAMP[RAMP.length - 1].c);
 }
 let frame = 0;
-const start = performance.now();
+let loopStart = performance.now();
 
 let time = 0;
 function apply(f) {
@@ -557,9 +560,15 @@ function apply(f) {
 
 function animate() {
   requestAnimationFrame(animate);
-  const elapsed = (performance.now() - start) / 1000;
+  const elapsed = (performance.now() - loopStart) / 1000;
   time = elapsed;
   frame = Math.floor(elapsed * DATA.meta.fps) % DATA.meta.frames;
+  if (recorder) {
+    const t = (performance.now() - recStart) / 1000;
+    recT.textContent = t.toFixed(1);
+    // One full loop, then stop on its own.
+    if (t >= DATA.meta.frames / DATA.meta.fps) stopRec();
+  }
   apply(frame);
   controls.update();
   renderer.render(scene, camera);
@@ -603,7 +612,49 @@ window.__amfly = {
     return out;
   },
 };
+// ---------------------------------------------------------------- record
+// MediaRecorder on the canvas stream. No screen capture, no extra tooling:
+// the page records exactly what it draws, at the size it draws it.
+let recorder = null, recChunks = [], recStart = 0;
+const recPanel = document.querySelector('#rec'), recT = document.querySelector('#recT');
+
+function startRec() {
+  const stream = canvas.captureStream(60);
+  // VP9 where available; Safari falls back to whatever it supports.
+  const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+  recorder = new MediaRecorder(stream, {
+    mimeType: mime, videoBitsPerSecond: 12_000_000,
+  });
+  recChunks = [];
+  recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
+  recorder.onstop = () => {
+    const blob = new Blob(recChunks, { type: 'video/webm' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `amfly-${Date.now()}.webm`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+    console.log('[amfly] recorded %.1f MB', blob.size / 1e6);
+  };
+  recorder.start();
+  recStart = performance.now();
+  recPanel.style.display = 'block';
+  // Restart playback so the clip begins at frame 0.
+  loopStart = performance.now();
+}
+
+function stopRec() {
+  if (!recorder) return;
+  recorder.stop();
+  recorder = null;
+  recPanel.style.display = 'none';
+}
+
 addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') {
+    recorder ? stopRec() : startRec();
+  }
   if (e.key === 'g' || e.key === 'G') {
     const on = !chambers[0].glass.visible;
     for (const c of chambers.concat([operator])) c.glass.visible = on;
