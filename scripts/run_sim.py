@@ -48,6 +48,13 @@ def main() -> int:
     ap.add_argument("--grip", type=int, default=2,
                     help="dials the operator can hold at once; 5 removes the "
                          "limit and restores the original indifferent design")
+    ap.add_argument("--debt-bias", type=float, default=None,
+                    help="how strongly neglect pulls the operator towards a "
+                         "chamber it has been ignoring")
+    ap.add_argument("--contrast", type=float, default=None,
+                    help="scales the differences between DN blocks")
+    ap.add_argument("--escalate", type=float, default=None,
+                    help="how fast neglect debt accumulates")
     ap.add_argument("--no-compulsion", action="store_true",
                     help="original design: the operator gets no feedback at all")
     ap.add_argument("--record-sample", type=int, default=2000,
@@ -121,6 +128,10 @@ def main() -> int:
     dial = Dials.build(dn, lif.dt_ms, window_ms=args.dial_window_ms,
                        dn_weights=dn_out)
     dial.grip = None if args.grip >= 5 else args.grip
+    if args.debt_bias is not None:
+        dial.debt_bias = args.debt_bias
+    if args.contrast is not None:
+        dial.contrast = args.contrast
     _loads = [float(dn_out[np.searchsorted(dn, b)].sum()) for b in dial._blocks]
     log.info("DN block synaptic load: %s (spread %.2fx)",
              [int(v) for v in _loads], max(_loads) / max(min(_loads), 1))
@@ -137,6 +148,8 @@ def main() -> int:
     if not args.no_compulsion:
         rew = resolve_reward_neurons(c.cell_type)
         comp = Compulsion(rew, th, c.n, 6)
+        if args.escalate is not None:
+            comp.escalate_rate = args.escalate
         log.info("compulsion: %d reward neurons (PAM/PPL1/PPL2), grip %s",
                  len(rew), dial.grip or "unlimited")
     div = Divergence()
