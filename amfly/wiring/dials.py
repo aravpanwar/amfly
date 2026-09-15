@@ -43,6 +43,10 @@ class Dials:
     latency_steps: int
     n_blocks: int = len(CHAMBERS)
 
+    # Outgoing synapse count per DN, used to balance the blocks. None falls
+    # back to contiguous slices, which are measurably unfair; see _partition.
+    dn_weights: np.ndarray | None = None
+
     # How fast a level can move. A level crosses its full range in roughly
     # 1/rate steps, so 1/400 is about 40ms at dt=0.1ms.
     #
@@ -73,7 +77,7 @@ class Dials:
     history: list = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
-        self._blocks = np.array_split(self.dn_indices, self.n_blocks)
+        self._blocks = self._partition()
         self._counts = np.zeros((self.window_steps, self.n_blocks), dtype=np.int32)
         self._baseline = np.zeros(self.n_blocks, dtype=np.float64)
         # Start at zero, NOT mid-range.
@@ -105,12 +109,47 @@ class Dials:
         )
         self._queue: list = []
 
+    def _partition(self) -> list:
+        """Split the DNs into blocks of comparable synaptic output.
+
+        Contiguous slices of sorted bodyId are NOT comparable. Measured, the
+        five blocks carried 1,586,011 / 1,076,376 / 486,094 / 236,733 / 707,345
+        outgoing synapses, a 6.70x spread, because bodyId ordering correlates
+        with neuron size and connectivity. Blocks 0 and 1 therefore fired more
+        whatever the fly was doing, and their chambers sat above half heat for
+        99% of a run while the other three sat at the floor for 96%.
+
+        That is the anatomy deciding, not the operator. Dealing each DN to the
+        currently lightest block (greedy longest-processing-time) brings the
+        spread to 1.00x with the blocks still holding ~263 DNs each, so a
+        difference between blocks now means the fly is doing something
+        different rather than one block simply being bigger.
+
+        Still a fixed, declared rule. No RNG, no training, and the partition is
+        a pure function of the connectome.
+        """
+        if self.dn_weights is None:
+            return np.array_split(self.dn_indices, self.n_blocks)
+
+        w = np.asarray(self.dn_weights, dtype=np.float64)
+        order = np.argsort(-w)          # heaviest first
+        loads = np.zeros(self.n_blocks)
+        groups = [[] for _ in range(self.n_blocks)]
+        for j in order:
+            k = int(np.argmin(loads))
+            groups[k].append(int(self.dn_indices[j]))
+            loads[k] += w[j]
+        # Sort within a block so the partition is deterministic and auditable.
+        return [np.array(sorted(g), dtype=np.int64) for g in groups]
+
     @classmethod
-    def build(cls, dn_indices, dt_ms: float, window_ms: float = 50.0) -> "Dials":
+    def build(cls, dn_indices, dt_ms: float, window_ms: float = 50.0,
+              dn_weights=None) -> "Dials":
         return cls(
             dn_indices=np.asarray(dn_indices),
             window_steps=max(1, int(round(window_ms / dt_ms))),
             latency_steps=max(1, int(round(DIAL_LATENCY_MS / dt_ms))),
+            dn_weights=dn_weights,
         )
 
     @property

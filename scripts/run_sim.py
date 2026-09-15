@@ -42,6 +42,9 @@ def main() -> int:
     ap.add_argument("--ms", type=float, default=100.0, help="simulated milliseconds")
     ap.add_argument("--baseline-mv", type=float, default=5.0,
                     help="phasic drive amplitude, identical to all six")
+    ap.add_argument("--record-sample", type=int, default=2000,
+                    help="neurons recorded at full resolution, for the brain "
+                         "view. 2000 lights only ~500 of 24000 rendered points")
     ap.add_argument("--dial-window-ms", type=float, default=50.0)
     ap.add_argument("--dial-latency-ms", type=float, default=None,
                     help="override the 500ms authored latency. Shorten it to "
@@ -103,12 +106,20 @@ def main() -> int:
         st = State.initial(c.n, lif)
         zeros = lambda: np.zeros((c.n, 6), dtype=np.float32)
         to_np = lambda x: x
-    dial = Dials.build(dn, lif.dt_ms, window_ms=args.dial_window_ms)
+    # Balance the DN blocks by synaptic output. Contiguous bodyId slices give
+    # a 6.70x spread, so two chambers dominate the dial regardless of what the
+    # operator does. See amfly/wiring/dials.py.
+    dn_out = np.abs(c.csr[:, dn]).sum(axis=0).A.ravel()
+    dial = Dials.build(dn, lif.dt_ms, window_ms=args.dial_window_ms,
+                       dn_weights=dn_out)
+    _loads = [float(dn_out[np.searchsorted(dn, b)].sum()) for b in dial._blocks]
+    log.info("DN block synaptic load: %s (spread %.2fx)",
+             [int(v) for v in _loads], max(_loads) / max(min(_loads), 1))
     if args.dial_latency_ms is not None:
         dial.latency_steps = max(1, int(round(args.dial_latency_ms / lif.dt_ms)))
         log.info("dial latency overridden to %.0f ms", args.dial_latency_ms)
     heat = ContinuousHeat(th, c.n, 6)
-    rec = Recorder.build(c.n, 6, dn, th)
+    rec = Recorder.build(c.n, 6, dn, th, sample=args.record_sample)
     div = Divergence()
 
     # Phasic drive into a strided slice of the central-brain sensory neurons.

@@ -221,3 +221,49 @@ def test_queued_switch_still_lands_during_dwell():
     for t in range(400):
         final = d.update(s, t)
     assert final == 4, "the queued switch never landed while dwell was active"
+
+
+# --------------------------------------------------------------------------
+# Balanced DN partition. Contiguous bodyId slices gave a 6.70x spread in
+# synaptic output, so two chambers dominated the dial whatever the operator
+# did. That is the anatomy deciding rather than the fly.
+# --------------------------------------------------------------------------
+
+def test_balanced_blocks_beat_contiguous_slices():
+    from amfly.wiring.dials import Dials
+
+    # Heavily skewed weights, the situation the real DNs are in.
+    n = 500
+    w = np.linspace(1.0, 60.0, n)
+    idx = np.arange(n)
+
+    contiguous = [w[b].sum() for b in np.array_split(idx, 5)]
+    d = Dials.build(idx, dt_ms=0.1, dn_weights=w)
+    balanced = [w[b].sum() for b in d._blocks]
+
+    c_spread = max(contiguous) / min(contiguous)
+    b_spread = max(balanced) / min(balanced)
+    assert b_spread < 1.05, f"blocks still uneven: {b_spread:.2f}x"
+    assert b_spread < c_spread, "balancing made it no better than slicing"
+
+
+def test_partition_keeps_every_dn_exactly_once():
+    from amfly.wiring.dials import Dials
+
+    idx = np.arange(313)
+    w = np.linspace(1.0, 99.0, len(idx))
+    d = Dials.build(idx, dt_ms=0.1, dn_weights=w)
+    allocated = np.sort(np.concatenate(d._blocks))
+    assert np.array_equal(allocated, idx), "a DN was dropped or duplicated"
+
+
+def test_partition_is_deterministic():
+    """No RNG: the same connectome must give the same partition every time."""
+    from amfly.wiring.dials import Dials
+
+    idx = np.arange(200)
+    w = np.linspace(1.0, 40.0, len(idx))
+    a = Dials.build(idx, dt_ms=0.1, dn_weights=w)._blocks
+    b = Dials.build(idx, dt_ms=0.1, dn_weights=w)._blocks
+    for x, y in zip(a, b):
+        assert np.array_equal(x, y)
