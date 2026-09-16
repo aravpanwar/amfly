@@ -18,7 +18,49 @@
   }
   #title { top: 0; left: 0; }
   #title h1 { font-size: 15px; font-weight: 600; letter-spacing: .14em; }
-  #title .sub { color: #6e6e74; font-size: 11px; margin-top: 3px; }
+  /* Sits above the brain tiles on the right, so the description and the thing
+     it describes are read together rather than at opposite corners. */
+  /* The description and the tiles are one flex column, not two fixed panels
+     offset from the centre by hand.
+     
+     Positioning each with its own translateY meant guessing both heights, and
+     a label one line taller than assumed put them straight through each
+     other. A column cannot overlap itself. */
+  #side {
+    position: fixed; right: 14px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 14px;
+    /* Align children to the right edge, so the text block ends level with the
+       brain tiles rather than starting level with them and running short. */
+    align-items: flex-end;
+    pointer-events: none;
+  }
+  /* position:static explicitly. #what carried class="panel", which sets
+     position:fixed, so it was lifted out of the #side flex column and pinned
+     to the viewport instead: the column could not space something that was no
+     longer in it, and the text landed straight on the tiles. The class is
+     gone, and this makes re-adding it harmless. */
+  #what {
+    position: static; pointer-events: none;
+    padding: 0; text-shadow: 0 1px 3px #000, 0 0 10px #000;
+  }
+  #what .pts {
+    list-style: none; color: #7e7e86; font-size: 9.5px;
+    line-height: 1.6; max-width: 42ch;
+    /* Left-aligned text, right-aligned BLOCK.
+       
+       Right-aligning the text itself removed the one thing a bullet needs: a
+       consistent line start. The markers ended up at the end of each line
+       reading as stray punctuation, and dropping them left five lines running
+       together. Keeping the lines left-aligned while align-items pushes the
+       whole block to the right edge gives both, and the block still ends level
+       with the tiles because it is as wide as its longest line. */
+    text-align: left;
+  }
+  #what .pts li { padding-left: 10px; position: relative; }
+  #what .pts li::before {
+    content: ''; position: absolute; left: 0; top: 6px;
+    width: 2px; height: 2px; background: #5c5c62;
+  }
   #readout { top: 62px; left: 0; text-align: left; font-size: 11px; color: #8a8a90; }
   #readout .row { display: flex; gap: 10px; justify-content: flex-start; width: 150px; }
   #readout .k { color: #5c5c62; }
@@ -30,7 +72,6 @@
   }
   /* Brain tiles: a 2x3 block, so the six are compared at a glance. */
   #brains {
-    position: fixed; right: 14px; top: 50%; transform: translateY(-50%);
     display: grid; grid-template-columns: repeat(2, auto); gap: 8px 10px;
     pointer-events: none;
   }
@@ -74,7 +115,6 @@
 
 <div class="panel" id="title">
   <h1>AMFLY</h1>
-  <div class="sub">nomouth</div>
 </div>
 
 <div class="panel" id="readout"><div id="rows"></div></div>
@@ -89,12 +129,23 @@
   <div class="cap" id="dcap">&nbsp;</div>
 </div>
 
-<div id="brains"></div>
-
-<div class="panel" id="hint">drag to orbit &middot; scroll to zoom &middot; <b>F</b> take &middot; <b>C</b> camera &middot; <b>R</b> record &middot; <b>S</b> sound</div>
-<div class="panel" id="rec" style="top:0;left:50%;transform:translateX(-50%);display:none;color:#ff5a45">
-  <span style="font-size:11px">&#9679; RECORDING <span id="recT">0.0</span>s &middot; press R to stop</span>
+<div id="side">
+<div id="what">
+  <ul class="pts">
+    <li>Six flies are put on an electric pin.</li>
+    <li>One of them is in a reward-punishment loop, and can only use two
+        channels at once.</li>
+    <li>Each channel is connected to the remaining five flies.</li>
+    <li>When a fly hits 100% the operator fly gets dopamine.</li>
+    <li>Every fly below 50% burns the operator fly instead.</li>
+    <li>&gt;: )</li>
+  </ul>
 </div>
+
+<div id="brains"></div>
+</div>
+
+<div class="panel" id="hint">drag to orbit &middot; scroll to zoom &middot; <b>F</b> take &middot; <b>C</b> camera &middot; <b>V</b> free &middot; <b>M</b> sound</div>
 
 <script type="importmap">
 { "imports": {
@@ -145,15 +196,24 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color('#150a0d');
 scene.fog = new THREE.Fog('#1c0e11', 18, 46);
 
-const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100);
+// Near plane at 0.02, not 0.1. A fly body is about 1.25 long and its probe
+// is 0.007 across, so getting close enough to fill the frame with the head put
+// geometry inside a 0.1 near plane and it vanished.
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.02, 100);
 camera.position.set(0, 3.4, 11.5);
 
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 controls.target.set(0, 0.5, 0);
-controls.minDistance = 4;
-controls.maxDistance = 22;
+// 0.35 rather than 4. The orbit could not get near enough to frame a single
+// specimen, so a close-up meant switching to the free camera even when an
+// orbit around one fly was what was wanted.
+controls.minDistance = 0.35;
+// 15, not 22. At 22 the camera cleared even the enlarged room's z wall, and
+// past about 15 the bench is small enough in frame that the extra distance
+// buys nothing anyway.
+controls.maxDistance = 15;
 controls.maxPolarAngle = Math.PI * 0.52;
 
 // Ambient for a dark room: it does most of the work, because near-black walls
@@ -256,7 +316,17 @@ for (let i = 0; i < 5; i++) {
 //
 // #2a1216 rather than anything more saturated: at this value the red is felt
 // more than seen, which is what keeps it eerie instead of theatrical.
-const ROOM_W = 26, ROOM_D = 20, ROOM_H = 11;
+// Deeper than it looks, so the orbit never reaches a wall.
+//
+// It was 26 by 20, and with the orbit target at the origin a maxDistance of
+// 22 put the camera eleven units past the z wall: the room turned inside out
+// and you saw it from the outside. Shrinking the orbit instead made it feel
+// cramped, and the room was the wrong size rather than the camera.
+//
+// Fog starts at 18 and ends at 46, so the far wall is never seen clearly at
+// any depth. Enlarging it costs nothing visually and removes the conflict
+// entirely: the camera can sit 15 units back and still be indoors.
+const ROOM_W = 40, ROOM_D = 36, ROOM_H = 13;
 const wallMat = new THREE.MeshStandardMaterial({
   color: '#2a1216', roughness: 0.95, metalness: 0, side: THREE.BackSide,
 });
@@ -581,7 +651,7 @@ function makeChamber(x, isOperator) {
   // Post behind the fly on the base plate, arm reaching forward over it, clamp
   // gripping the probe. That also explains the cable, which now runs to a
   // connector on the arm rather than appearing to tug on the head.
-  let clamp = null;
+  let clamp = null, post = null, arm = null;
   if (isOperator) {
     const armMat = new THREE.MeshStandardMaterial({
       color: '#2a2f37', roughness: 0.42, metalness: 0.82,
@@ -622,6 +692,8 @@ function makeChamber(x, isOperator) {
     mClamp.castShadow = true;
     g.add(mClamp);
     clamp = mClamp;
+    post = mPost;
+    arm = mArm;
   }
 
   // The connector the cable lands on, so the wire terminates on hardware
@@ -799,6 +871,7 @@ function makeChamber(x, isOperator) {
   scene.add(g);
   return { group: g, core, glass, lamp, edges, isOperator,
            pinHot, pinShaft, pinHead, base, probe, probeCap, clamp,
+           mPost: post, mArm: arm,
            vCtx, vTex, screen, _vShown: -1 };
 }
 
@@ -821,29 +894,17 @@ operator.group.rotation.y = Math.PI;
 // They are placed low and close so the light stays on the operator and does
 // not wash across the five. What is done TO the operator should not look like
 // it is happening to everything.
-// Tight underlighting, not a floodlight.
+// No underlighting on the operator.
 //
-// These ran at a 2.6 unit range and up to 3.4 intensity, which is most of the
-// operator's bench, so a dopamine hit threw green across the bench, the labels
-// and the fly with no visible source. That is the phantom glow: a lamp big
-// enough to light a room, hidden under a body.
+// Two PointLights used to sit below the body and throw reward and punishment
+// down onto the base plate. Even tightened to a 0.85 range they pooled red
+// and green under the specimen with no visible fitting, which reads as a
+// rendering artefact rather than as a lamp: light with no source is the one
+// thing that makes a clinical room look like a game.
 //
-// 0.85 keeps the light on the underside of the specimen it belongs to, which
-// is what underlighting is meant to do, and leaves the two named lamps beside
-// it to say the same thing legibly.
-// The pool under the operator is deliberate.
-//
-// This lamp sits below the body and throws its light down onto the base
-// plate, so a dopamine hit pools green under the specimen. That was an
-// accident of placement at first and it is kept on purpose: the reward is the
-// one thing in the scene with no apparatus, no wire and no housing, so a glow
-// with no visible fitting is the right shape for it.
-operator.rewardLamp = new THREE.PointLight('#48c46e', 0, 0.85, 2.4);
-operator.rewardLamp.position.set(0, -0.62, 0.34);
-operator.group.add(operator.rewardLamp);
-operator.punishLamp = new THREE.PointLight('#ff4a22', 0, 0.85, 2.4);
-operator.punishLamp.position.set(0, -0.62, -0.34);
-operator.group.add(operator.punishLamp);
+// The state is already carried by the two named lamps beside it, which have
+// housings and labels, and by the panel. Nothing is lost by dropping a third
+// copy of the same signal.
 
 // -------------------------------------------------------------- the console
 //
@@ -942,7 +1003,7 @@ for (let i = 0; i < CH; i++) {
 // Curves rather than straight lines, so they hang like cable instead of
 // reading as a diagram. TubeGeometry is built once per wire; only the
 // material changes per frame.
-function wire(points, colour, radius) {
+function wire(points, colour, radius, cast) {
   // One continuous curve through every point, not a chain of short tubes.
   //
   // Each cable used to be two separate TubeGeometries meeting at the plate
@@ -964,7 +1025,11 @@ function wire(points, colour, radius) {
     new THREE.TubeGeometry(
       curve,
       Math.max(36, Math.round(curve.getLength() * 34)),
-      radius === undefined ? 0.016 : radius,
+      // Thinner across the board. These are signal leads on a bench, and at
+      // 0.016 they read closer to mains flex than to instrument cable.
+      // 0.011 is 4.5 texels in the shadow map, still well above the ~2 where
+      // a shadow breaks into dashes.
+      radius === undefined ? 0.011 : radius,
       8, false
     ),
     new THREE.MeshStandardMaterial({
@@ -974,7 +1039,12 @@ function wire(points, colour, radius) {
   );
   // A cable lying on a bench needs its own contact shadow or it reads as
   // painted on. At 8.7 texels across it is now wide enough to cast one.
-  mesh.castShadow = true;
+  // Runs that leave the room do not cast. The shadow camera is a 15 unit box
+  // tightened around the benches so the pins resolve at all, and those cables
+  // fall outside it, so their shadows stop partway along and read as a
+  // clipped edge. Widening the box would halve the resolution on everything
+  // that matters.
+  mesh.castShadow = cast !== false;
   mesh.receiveShadow = true;
   scene.add(mesh);
   return mesh;
@@ -1049,8 +1119,116 @@ const headWire = wire(
     new THREE.Vector3(0, PANEL_Y + 0.05, PANEL_Z - 0.28),
     0.30, BENCH_TOP + 0.03
   ),
-  '#3a3f49', 0.018
+  '#3a3f49', 0.012
 );
+
+// ------------------------------------------------------- the rest of the rig
+//
+// Cables leaving the frame, so this reads as one station in a facility rather
+// than the only thing in the room. Nothing here is a new mechanism: it is the
+// same cable already coming off the panel, continued past the edge of what the
+// camera sees, and terminated on a supply cabinet so it does not simply stop
+// in mid air when viewed from behind.
+{
+  const trunkMat = '#2b3039';
+  const CAB_X = -9.4, CAB_Z = PANEL_Z - 1.5;
+  const CAB_W = 1.3, CAB_H = 2.15, CAB_D = 0.85;
+
+  // Offset ACROSS the run, not along it. Offsetting in x, the direction these
+  // travel, shifted each cable further along its own line rather than beside
+  // its neighbours, so the three merged into one on the straight stretch and
+  // split again only where the route turned.
+  // Spacing tightened with the cables. At 0.09 apart and a 0.019 radius the
+  // gap is 1.4x the cable width, which reads as three separate runs; 0.066
+  // brings it back to roughly three quarters and they read as a bundle again.
+  for (const [k, off] of [[0, 0], [1, 0.066], [2, -0.066]]) {
+    const dy = k === 0 ? 0 : (k === 1 ? 0.012 : -0.010);
+    wire([
+      new THREE.Vector3(-1.05 + off * 0.5, PANEL_Y + 0.02 + dy, PANEL_Z - 0.2 + off),
+      new THREE.Vector3(-1.55 + off * 0.5, PANEL_Y - 0.03 + dy, PANEL_Z - 0.5 + off),
+      new THREE.Vector3(-1.9, BENCH_TOP - 0.3 + dy, PANEL_Z - 0.75 + off),
+      new THREE.Vector3(-2.4, FLOOR_Y + 0.08, PANEL_Z - 0.95 + off),
+      new THREE.Vector3(-5.5, FLOOR_Y + 0.045, PANEL_Z - 1.2 + off),
+      new THREE.Vector3(-7.9, FLOOR_Y + 0.10, CAB_Z + off),
+      new THREE.Vector3(CAB_X + CAB_W / 2 + 0.16, FLOOR_Y + 0.29, CAB_Z + off * 0.45),
+    ], trunkMat, 0.019, false);
+  }
+
+  // The supply cabinet. A closed box rather than a facade, because the view
+  // orbits and every side gets seen.
+  {
+    const cabMat = new THREE.MeshStandardMaterial({
+      color: '#262b33', roughness: 0.52, metalness: 0.72,
+    });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(CAB_W, CAB_H, CAB_D), cabMat);
+    body.position.set(CAB_X, FLOOR_Y + CAB_H / 2, CAB_Z);
+    body.castShadow = true; body.receiveShadow = true;
+    scene.add(body);
+
+    const plinth = new THREE.Mesh(
+      new THREE.BoxGeometry(CAB_W + 0.14, 0.09, CAB_D + 0.14),
+      new THREE.MeshStandardMaterial({ color: '#1b1f25', roughness: 0.6, metalness: 0.6 })
+    );
+    plinth.position.set(CAB_X, FLOOR_Y + 0.045, CAB_Z);
+    plinth.castShadow = true; plinth.receiveShadow = true;
+    scene.add(plinth);
+
+    const seam = new THREE.Mesh(
+      new THREE.BoxGeometry(0.012, CAB_H - 0.22, 0.01),
+      new THREE.MeshStandardMaterial({ color: '#12151a', roughness: 0.8 })
+    );
+    seam.position.set(CAB_X, FLOOR_Y + CAB_H / 2, CAB_Z + CAB_D / 2 + 0.006);
+    scene.add(seam);
+
+    const handle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.3, 0.05),
+      new THREE.MeshStandardMaterial({ color: '#3a4049', roughness: 0.4, metalness: 0.85 })
+    );
+    handle.position.set(CAB_X + 0.22, FLOOR_Y + CAB_H * 0.55, CAB_Z + CAB_D / 2 + 0.04);
+    handle.castShadow = true;
+    scene.add(handle);
+
+    // Static, because it is supply. It does not have opinions about what the
+    // bench is doing, and animating it would make it compete with the panel.
+    const supplyLamp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.038, 12, 10),
+      new THREE.MeshStandardMaterial({
+        color: '#14171c', roughness: 0.3,
+        emissive: new THREE.Color('#3fe07a'), emissiveIntensity: 2.2,
+      })
+    );
+    supplyLamp.position.set(CAB_X - 0.34, FLOOR_Y + CAB_H - 0.28, CAB_Z + CAB_D / 2 + 0.03);
+    scene.add(supplyLamp);
+
+    const gland = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.11, 0.13, 0.12, 14),
+      new THREE.MeshStandardMaterial({ color: '#1b1f25', roughness: 0.5, metalness: 0.75 })
+    );
+    gland.rotation.z = Math.PI / 2;
+    gland.position.set(CAB_X + CAB_W / 2 + 0.05, FLOOR_Y + 0.30, CAB_Z);
+    gland.castShadow = true;
+    scene.add(gland);
+  }
+
+  // Overhead runs, high enough to read as ceiling services rather than as
+  // something hanging over the bench.
+  for (const z of [-6.4, -5.6, 2.6, 3.4]) {
+    wire(
+      hang(new THREE.Vector3(-12.5, 6.9, z), new THREE.Vector3(12.5, 6.9, z), 1.1),
+      '#24282f', 0.022, false
+    );
+  }
+
+  for (const [x, z] of [[-7.2, -6.0], [7.2, 3.0]]) {
+    const drop = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.07, 0.07, 3.1, 10),
+      new THREE.MeshStandardMaterial({ color: '#22262d', roughness: 0.6, metalness: 0.5 })
+    );
+    drop.position.set(x, 8.4, z);
+    drop.castShadow = false;
+    scene.add(drop);
+  }
+}
 
 // Five wires out to the pins, one per chamber, in chamber order.
 //
@@ -1182,16 +1360,21 @@ for (const spec of [
   { x:  0.95, colour: '#ff4a22', ink: '#8a4a38', key: 'punish', label: 'HEAT' },
 ]) {
   const unit = new THREE.Group();
-  unit.position.set(spec.x, BENCH_TOP, -3.6);
+  // The lamp sits ON the driver box, not on its own plinth in front of it.
+  // They were two objects half a unit apart, so the indicator and the thing it
+  // reports on did not obviously belong together, and it frees the bench in
+  // front for the label.
+  unit.position.set(spec.x, BENCH_TOP + 0.24, -4.12);
   scene.add(unit);
 
+  // A collar rather than a full housing: the box below is the housing now.
   const housing = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.11, 0.13, 0.08, 18),
+    new THREE.CylinderGeometry(0.052, 0.062, 0.03, 16),
     new THREE.MeshStandardMaterial({
       color: '#1d2027', roughness: 0.5, metalness: 0.7,
     })
   );
-  housing.position.y = 0.04;
+  housing.position.y = 0.015;
   housing.castShadow = true; housing.receiveShadow = true;
   unit.add(housing);
 
@@ -1202,7 +1385,7 @@ for (const spec of [
       emissive: new THREE.Color(spec.colour), emissiveIntensity: 0,
     })
   );
-  led.position.y = 0.115;
+  led.position.y = 0.062;
   led.castShadow = true;
   unit.add(led);
 
@@ -1214,7 +1397,7 @@ for (const spec of [
   // nothing that small throws light that far. 0.34 keeps the spill on the
   // lamp's own fitting, which is what makes it look like a lamp.
   const glow = new THREE.PointLight(spec.colour, 0, 0.34, 2.6);
-  glow.position.y = 0.14;
+  glow.position.y = 0.11;
   unit.add(glow);
 
   // The name on the bench, just in front of its own lamp.
@@ -1228,9 +1411,119 @@ for (const spec of [
   // z=-2.95 is 0.65 toward the viewer from the lamp at -3.6. That clears the
   // 0.13 housing and leaves 0.14 of bench beyond the label's near edge; at
   // -2.85 it was 0.04, which reads as the text about to slide off.
-  groundLabel(spec.label, spec.ink, spec.x, -2.95);
+  // Where the lamp used to be, now that the indicator has moved onto the box.
+  groundLabel(spec.label, spec.ink, spec.x, -3.52);
 
-  statusLeds.push({ led, glow, key: spec.key });
+  // A driver unit behind the lamp, which is what the cable actually leaves.
+  //
+  // The feed used to come straight out of the bulb, and a bulb is an
+  // indicator: it reports, it does not deliver. A small box with a terminal on
+  // it is the thing that would generate a stimulus, and the lamp on top of it
+  // is then what it does to say so.
+  //
+  // Sits behind the lamp rather than outboard, where there is a full unit of
+  // bench: outboard leaves 0.22 before the edge.
+  const drv = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, 0.24, 0.42),
+    new THREE.MeshStandardMaterial({
+      color: '#1f232a', roughness: 0.48, metalness: 0.74,
+    })
+  );
+  drv.position.set(spec.x, BENCH_TOP + 0.12, -4.12);
+  drv.castShadow = true; drv.receiveShadow = true;
+  scene.add(drv);
+
+  // A vent strip, so the box reads as electronics rather than a block.
+  for (let v = 0; v < 4; v++) {
+    const slot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.012, 0.008),
+      new THREE.MeshStandardMaterial({ color: '#0d1014', roughness: 0.9 })
+    );
+    slot.position.set(spec.x, BENCH_TOP + 0.05 + v * 0.035, -4.12 + 0.212);
+    scene.add(slot);
+  }
+
+  // The terminal the feed leaves from, on the face towards the operator.
+  // The terminal is on the SIDE face, facing inward toward the manipulator.
+  //
+  // It used to sit on the front, so the cable left toward the viewer, doubled
+  // back and clipped through the box on its way to the arm. Leaving from the
+  // inner side means it already points where it needs to go, which is also
+  // why a real unit would put its outlet there.
+  const inward = -Math.sign(spec.x);
+  const term = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.036, 0.06, 12),
+    new THREE.MeshStandardMaterial({
+      color: '#2e343d', roughness: 0.4, metalness: 0.85,
+      emissive: new THREE.Color(spec.colour), emissiveIntensity: 0,
+    })
+  );
+  term.rotation.z = Math.PI / 2;
+  term.position.set(spec.x + inward * 0.19, BENCH_TOP + 0.15, -4.12);
+  term.castShadow = true;
+  scene.add(term);
+
+  statusLeds.push({
+    led, glow, key: spec.key, unit, colour: spec.colour, term,
+    out: new THREE.Vector3(spec.x + inward * 0.23, BENCH_TOP + 0.15, -4.12),
+  });
+}
+
+// Wire the two lamps to the head, so the delivery is visible.
+//
+// They sat either side of the operator with nothing connecting them to it, so
+// a viewer had to take on trust that either signal reached the animal. Both
+// genuinely arrive at the brain: reward into 340 dopaminergic neurons,
+// punishment into the operator's own thermoreceptors, and both through the
+// same electrode already in its head.
+//
+// A line from each lamp to that electrode makes the path visible without
+// inventing anything. These are thin, because what they carry is a signal
+// rather than power.
+{
+  const capPos = new THREE.Vector3();
+  if (operator.probeCap) {
+    operator.probeCap.getWorldPosition(capPos);
+    // Run the feeds along the manipulator, not through the air.
+    //
+    // They used to arc from the driver straight to the head, climbing nearly
+    // a unit with nothing beneath them, which reads as a wire standing up by
+    // itself. A real rig does not leave signal leads hanging: they are tied to
+    // the manipulator, which is already the thing reaching over the animal.
+    //
+    // The post happens to rise at world z=-4.22 and the drivers sit at -4.12,
+    // so the structure is right where the cables need it.
+    // Guarded: the manipulator is built for the operator only, so these are
+    // null on a chamber and the feeds simply are not drawn.
+    const postPos = new THREE.Vector3();
+    const armPos = new THREE.Vector3();
+    operator.mPost?.getWorldPosition(postPos);
+    operator.mArm?.getWorldPosition(armPos);
+
+    for (const [k, L] of (operator.mPost ? statusLeds.entries() : [])) {
+      const from = L.out.clone();
+      // Sit one cable slightly above the other along the arm, so the pair
+      // reads as two leads taped down rather than as one thick one.
+      const lane = k === 0 ? 0.030 : -0.026;
+      const side = Math.sign(from.x) * 0.045;
+
+      L.feed = wire([
+        from,
+        // Straight inward off the side terminal, on the level. The cable is
+        // already pointing at the post, so the first stretch is just a run
+        // across the bench rather than a turn.
+        new THREE.Vector3(from.x * 0.42, from.y, postPos.z + 0.04),
+        new THREE.Vector3(side, postPos.y - 0.34, postPos.z + 0.055),
+        // Up the post.
+        new THREE.Vector3(side, armPos.y - 0.10, postPos.z + 0.05),
+        // Onto the arm and forward along it.
+        new THREE.Vector3(side * 0.7, armPos.y + 0.055 + lane, armPos.z + 0.02),
+        new THREE.Vector3(side * 0.4, armPos.y + 0.055 + lane, capPos.z - 0.16),
+        // Down onto the probe connector.
+        capPos.clone(),
+      ], '#33383f', 0.008, false);
+    }
+  }
 }
 
 // Panel handles, looked up once.// Panel handles, looked up once.// Panel handles, looked up once. Missing nodes leave UI.rf undefined and the
@@ -1240,6 +1533,79 @@ const UI = {
   rv: document.querySelector('#rv'), pv: document.querySelector('#pv'),
   dcap: document.querySelector('#dcap'),
 };
+
+// ------------------------------------------------------------- free camera
+//
+// A true flythrough: WASD to move, mouse to look, Q and E for down and up.
+//
+// An orbit with wider limits is not the same thing. An orbit always points at
+// a target and can only circle it, so however far it is allowed to go it can
+// never fly down the row at bench height or turn its back on the bench. This
+// detaches the camera from the target entirely.
+//
+// Movement is in the camera's own frame, so W is always "forward from here"
+// rather than along a world axis, which is what makes it feel like flying
+// rather than dragging a gantry.
+const fly = { on: false, keys: new Set(), yaw: 0, pitch: 0, speed: 3.4 };
+
+function toggleFly() {
+  fly.on = !fly.on;
+  if (fly.on) {
+    // Adopt the orbit's current view, so the switch does not jump.
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    fly.yaw = Math.atan2(-dir.x, -dir.z);
+    fly.pitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
+    controls.enabled = false;
+    canvas.requestPointerLock?.();
+  } else {
+    controls.enabled = true;
+    document.exitPointerLock?.();
+    // Give the orbit a target in front of wherever the camera ended up, so it
+    // resumes from this view instead of snapping back to the bench.
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    controls.target.copy(camera.position).addScaledVector(dir, 6);
+    controls.update();
+  }
+  return 'camera ' + (fly.on ? 'free (WASD, Q/E, mouse)' : 'orbit');
+}
+
+addEventListener('keydown', e => { if (fly.on) fly.keys.add(e.code); });
+addEventListener('keyup', e => fly.keys.delete(e.code));
+addEventListener('mousemove', e => {
+  if (!fly.on || document.pointerLockElement !== canvas) return;
+  fly.yaw -= e.movementX * 0.0022;
+  fly.pitch -= e.movementY * 0.0022;
+  // Just short of straight up and down: at exactly +/-90 the view loses its
+  // sense of roll and the next mouse move flips it.
+  fly.pitch = THREE.MathUtils.clamp(fly.pitch, -1.53, 1.53);
+});
+// Leaving pointer lock, by Escape or by clicking away, drops out of fly mode
+// rather than leaving the camera stuck with no way to look around.
+document.addEventListener('pointerlockchange', () => {
+  if (fly.on && document.pointerLockElement !== canvas) toggleFly();
+});
+
+function updateFly(dt) {
+  if (!fly.on) return;
+  camera.quaternion.setFromEuler(new THREE.Euler(fly.pitch, fly.yaw, 0, 'YXZ'));
+
+  const k = fly.keys;
+  const fwd = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0);
+  const side = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
+  const rise = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
+  if (!fwd && !side && !rise) return;
+
+  // Shift for a slow crawl, which is what framing a close shot needs.
+  const sp = fly.speed * (k.has('ShiftLeft') || k.has('ShiftRight') ? 0.25 : 1) * dt;
+  const f = new THREE.Vector3();
+  camera.getWorldDirection(f);
+  const r = new THREE.Vector3().crossVectors(f, camera.up).normalize();
+  camera.position.addScaledVector(f, fwd * sp);
+  camera.position.addScaledVector(r, side * sp);
+  camera.position.y += rise * sp;
+}
 
 // -------------------------------------------------------------- camera move
 //
@@ -1340,14 +1706,14 @@ const labels = [];
 for (let i = 0; i < CH; i++) {
   const el = document.createElement('div');
   el.className = 'row';
-  el.innerHTML = `<span class="k">chamber ${i}</span><span class="v">0%</span>`;
+  el.innerHTML = `<span class="k">fly ${i}</span><span class="v">0%</span>`;
   rows.appendChild(el);
   labels.push(el.querySelector('.v'));
 }
 const opRow = document.createElement('div');
 opRow.className = 'row';
 opRow.style.marginTop = '6px';
-opRow.innerHTML = `<span class="k">operator</span><span class="v" style="color:#5590d8">at the buttons</span>`;
+opRow.innerHTML = `<span class="k">operator</span><span class="v" style="color:#5590d8">at the panel</span>`;
 rows.appendChild(opRow);
 
 const timeRow = document.createElement('div');
@@ -1370,7 +1736,7 @@ for (let i = 0; i < 6; i++) {
   wrap.className = 't';
   const lab = document.createElement('div');
   lab.className = 'lab';
-  lab.innerHTML = `<span>${isOp ? 'operator' : 'chamber ' + i}</span><span class="hz"></span>`;
+  lab.innerHTML = `<span>${isOp ? 'operator' : 'fly ' + i}</span><span class="hz"></span>`;
   if (isOp) { wrap.style.marginTop = '10px'; lab.style.color = '#4a6f9e'; }
   const cv = document.createElement('canvas');
   cv.width = TRACE_W * 2; cv.height = TRACE_H * 2;
@@ -1416,7 +1782,11 @@ function drawTraces(f) {
 // Larger tiles, because 18,530 live points cannot land on 190x118 without
 // piling several neurons into every pixel. At 240x150 the same cloud spreads
 // over 1.6x the area, so dense and sparse regions separate.
-const BRAIN_W = 240, BRAIN_H = 150;
+// Smaller. At 240x150 the six tiles took a large block of the right side and
+// competed with the scene for attention; they are a readout, not the subject.
+// 165x103 keeps the same aspect and still leaves 0.27 neurons per device pixel
+// at 2x backing scale, so the detail added by lighting 18,530 points survives.
+const BRAIN_W = 165, BRAIN_H = 103;
 const brainBox = document.querySelector('#brains');
 const brainTiles = [];
 
@@ -1445,7 +1815,7 @@ for (let i = 0; i < 6; i++) {
   wrap.className = 'b';
   const lab = document.createElement('div');
   lab.className = 'blab';
-  lab.textContent = isOp ? 'operator' : 'chamber ' + i;
+  lab.textContent = isOp ? 'operator' : 'fly ' + i;
   if (isOp) lab.style.color = '#6d9bd4';
   const cv = document.createElement('canvas');
   cv.width = BRAIN_W * 2; cv.height = BRAIN_H * 2;
@@ -1848,8 +2218,8 @@ function apply(f) {
     // winning and that is the whole question.
     UI.dcap.textContent =
       rw > 0.55 && pn > 0.55 ? 'paid and burned at once'
-      : rw > 0.55 ? 'a chamber reached full'
-      : pn > 0.55 ? 'chambers left to go cold'
+      : rw > 0.55 ? 'a fly reached full'
+      : pn > 0.55 ? 'flies left to go cold'
       : pn > rw ? 'falling behind'
       : 'holding';
   }
@@ -1858,8 +2228,7 @@ function apply(f) {
   // without the panel. Green from below when it is paid, red when it is
   // burned. Underlighting rather than tinting the body: the fly keeps its own
   // colour here for the same reason the chambers do.
-  operator.rewardLamp.intensity = rw * 1.5;
-  operator.punishLamp.intensity = pn * 1.3;
+
 
   // The two status LEDs beside it, which is the readable version of the same
   // thing. The underlighting says the mood of the frame; these say the value.
@@ -1897,13 +2266,34 @@ function apply(f) {
   // the point: the thing at the buttons is held in place by the same apparatus
   // as the things it is heating. What DOES reach its pin is its own
   // punishment, delivered through its own thermoreceptors.
+  // Each feed lights with its own signal, so the current is visibly travelling
+  // from the lamp that names it to the head it reaches.
+  for (const L of statusLeds) {
+    if (!L.feed) continue;
+    const v = L.key === 'reward' ? rw : Math.max(0, (pn - 0.15) / 0.7);
+    const lit = Math.pow(Math.min(1, Math.max(0, v)), 0.6);
+    L.feed.material.emissive.set(L.colour);
+    L.feed.material.emissiveIntensity = 0.04 + lit * 2.6;
+    // The terminal lights first, since that is where the stimulus leaves.
+    if (L.term) L.term.material.emissiveIntensity = lit * 1.8;
+  }
+
   if (operator.probe) {
-    // The probe carries whatever the console is doing back into the operator's
-    // own head, so it pulses with its activity rather than sitting inert.
+    // The probe takes the COLOUR of whatever is arriving, not a fixed one.
+    //
+    // It used to blend both into a muddy orange whatever was happening, which
+    // said current is flowing but never which kind. Reward and punishment are
+    // the two things being done to this fly and they are opposites, so the
+    // electrode delivering them should say which one it is carrying: green
+    // when it is being paid, red when it is being burned, and the mix only
+    // when both are genuinely true at once.
+    const pnv = Math.max(0, (pn - 0.15) / 0.7);
     operator.probe.material.emissiveIntensity =
-      0.15 + Math.pow(pn, 0.7) * 3.0 + rw * 0.8;
+      0.15 + Math.pow(pnv, 0.7) * 2.6 + Math.pow(rw, 0.6) * 3.4;
     operator.probe.material.emissive.setRGB(
-      0.5 + pn * 0.5, 0.12 + rw * 0.5, 0.1 + rw * 0.3
+      0.12 + pnv * 0.95,
+      0.10 + rw * 0.85,
+      0.08 + rw * 0.35
     );
   }
   operator.pinHot.material.emissiveIntensity = 0.2 + Math.pow(pn, 0.7) * 4.0;
@@ -1945,20 +2335,20 @@ function apply(f) {
 function animate() {
   requestAnimationFrame(animate);
   const elapsed = (performance.now() - loopStart) / 1000;
+  // Frame delta for the free camera, so speed is per second rather than per
+  // frame. Capped at 0.1 so a stalled tab does not launch the camera across
+  // the room on the frame it resumes.
+  const dt = Math.min(0.1, elapsed - (window.__lastT ?? elapsed));
+  window.__lastT = elapsed;
   time = elapsed;
   frame = Math.floor(elapsed * DATA.meta.fps) % DATA.meta.frames;
-  if (recorder) {
-    const t = (performance.now() - recStart) / 1000;
-    recT.textContent = t.toFixed(1);
-    // One full loop, then stop on its own.
-    if (t >= DATA.meta.frames / DATA.meta.fps) stopRec();
-  }
   apply(frame);
   // The shot drives the camera directly, so the orbit must not also write to
   // it on the same frame; controls.enabled is false for the shot's duration
   // and update() then only settles damping.
   updateShot();
   controls.update();
+  updateFly(dt);
   renderer.render(scene, camera);
 }
 
@@ -2108,59 +2498,42 @@ function updateAudio(f) {
   }
 }
 
-// ---------------------------------------------------------------- record
-// MediaRecorder on the canvas stream. No screen capture, no extra tooling:
-// the page records exactly what it draws, at the size it draws it.
-let recorder = null, recChunks = [], recStart = 0;
-const recPanel = document.querySelector('#rec'), recT = document.querySelector('#recT');
-
-function startRec() {
-  const stream = canvas.captureStream(60);
-  // VP9 where available; Safari falls back to whatever it supports.
-  const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
-  const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
-  recorder = new MediaRecorder(stream, {
-    mimeType: mime, videoBitsPerSecond: 12_000_000,
-  });
-  recChunks = [];
-  recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
-  recorder.onstop = () => {
-    const blob = new Blob(recChunks, { type: 'video/webm' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `amfly-${Date.now()}.webm`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-    console.log('[amfly] recorded %.1f MB', blob.size / 1e6);
-  };
-  recorder.start();
-  recStart = performance.now();
-  recPanel.style.display = 'block';
-  // Restart playback so the clip begins at frame 0.
-  loopStart = performance.now();
-}
-
-function stopRec() {
-  if (!recorder) return;
-  recorder.stop();
-  recorder = null;
-  recPanel.style.display = 'none';
-}
+// No canvas recorder.
+//
+// MediaRecorder on canvas.captureStream() grabs the WebGL canvas and nothing
+// else, so every clip lost the readout, the description, the reward and heat
+// bars, the six brain tiles and the trace panel: DOM elements over the canvas
+// and about half of what the piece says. A screen recorder gets all of it.
 
 addEventListener('keydown', e => {
-  if (e.key === 's' || e.key === 'S') toggleAudio();
-  if (e.key === 'r' || e.key === 'R') {
-    recorder ? stopRec() : startRec();
+  // V always works, so there is a way out of fly mode.
+  if (e.key === 'v' || e.key === 'V') {
+    console.log('[amfly]', toggleFly());
+    return;
   }
+
+  // While flying, the letter shortcuts are suppressed.
+  //
+  // WASD collides with almost all of them: S is sound, and D, A and W sit
+  // next to keys that start a recording. Pressing S to back up would toggle
+  // the audio on every tap, which makes the free camera unusable alongside
+  // the shortcuts rather than merely awkward.
+  //
+  // The movement keys are read from a held-key set in updateFly, so nothing
+  // here needs to handle them; this only has to stay out of the way.
+  if (fly.on) return;
+
+  if (e.key === 'm' || e.key === 'M') toggleAudio();
   if (e.key === 'c' || e.key === 'C') {
     console.log('[amfly]', shot.on ? stopShot() : startShot());
   }
-  // Shot and recording in one keypress, which is how a take should be made:
-  // the recorder starts, the camera runs, and both stop on their own.
+  // A take: playback restarts from frame 0 and the camera move runs, so a
+  // screen recording started just before this catches the run from the
+  // beginning rather than from wherever the loop happened to be.
   if (e.key === 'f' || e.key === 'F') {
-    if (!recorder) startRec();
+    loopStart = performance.now();
     if (!shot.on) startShot();
-    console.log('[amfly] take: recording + shot');
+    console.log('[amfly] take: playback from 0 + camera move');
   }
 });
 animate();
