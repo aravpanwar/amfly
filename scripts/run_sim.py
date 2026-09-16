@@ -208,7 +208,8 @@ def main() -> int:
         levels = dial.update(spikes, t)
         pos = int(np.argmax(levels))  # hottest chamber, for the summary only
         ham = div.update(spikes, t)
-        rec.record(t, spikes, heat.levels, pos, ham)
+        rw, pn = comp.state if comp is not None else (None, None)
+        rec.record(t, spikes, heat.levels, pos, ham, reward=rw, punish=pn)
 
         if t % 100 == 0 and t:
             el = time.time() - t0

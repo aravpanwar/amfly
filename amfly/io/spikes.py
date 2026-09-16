@@ -36,6 +36,10 @@ class Recorder:
     heat_levels: list = field(default_factory=list, init=False)
     dial: list = field(default_factory=list, init=False)
     hamming: list = field(default_factory=list, init=False)
+    # What the operator is being paid and charged, per step. This is the
+    # premise of the piece and it used to survive only as a mean in
+    # provenance, so nothing downstream could show it.
+    drive: list = field(default_factory=list, init=False)
     _subset_events: list = field(default_factory=list, init=False)
 
     @classmethod
@@ -61,12 +65,16 @@ class Recorder:
         heat: np.ndarray,
         dial_position: int,
         hamming: np.ndarray | None = None,
+        reward: float | None = None,
+        punish: float | None = None,
     ) -> None:
         self.rates.append(spikes.sum(axis=0).astype(np.int32))
         if hamming is not None:
             self.hamming.append(np.asarray(hamming, dtype=np.int32))
         self.heat_levels.append(heat.astype(np.float32))
         self.dial.append(dial_position)
+        if reward is not None:
+            self.drive.append((np.float32(reward), np.float32(punish or 0.0)))
 
         sub = spikes[self.subset]
         rows, cols = np.nonzero(sub)
@@ -100,6 +108,9 @@ class Recorder:
             hamming=np.array(self.hamming, dtype=np.int32)
             if self.hamming
             else np.zeros((0, self.n_instances), dtype=np.int32),
+            drive=np.array(self.drive, dtype=np.float32)
+            if self.drive
+            else np.zeros((0, 2), dtype=np.float32),
             subset=self.subset.astype(np.int32),
             events_step=ev[0],
             events_neuron=ev[1],

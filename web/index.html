@@ -47,6 +47,27 @@
     margin-bottom: 1px;
   }
   #traces canvas { display: block; background: #101014; border-left: 1px solid #23232a; }
+
+  /* The operator's own state. Placed apart from the chamber readouts,
+     because it is the one thing in the scene that is not about a chamber. */
+  #drive {
+    position: fixed; left: 14px; top: 190px; pointer-events: none; width: 200px;
+  }
+  #drive .dlab {
+    font-size: 9.5px; color: #5c5c62; letter-spacing: .06em;
+    display: flex; justify-content: space-between; margin-bottom: 3px;
+  }
+  #drive .bar {
+    height: 7px; background: #141419; border: 1px solid #22222a;
+    margin-bottom: 9px; position: relative; overflow: hidden;
+  }
+  #drive .fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+  }
+  #drive .cap {
+    font-size: 9.5px; color: #4a4a50; letter-spacing: .04em;
+    margin: -4px 0 10px 0; line-height: 1.45;
+  }
 </style>
 
 <canvas id="c"></canvas>
@@ -59,11 +80,21 @@
 <div class="panel" id="readout"><div id="rows"></div></div>
 
 <div id="traces"></div>
+
+<div class="panel" id="drive">
+  <div class="dlab"><span>OPERATOR &middot; REWARD</span><span id="rv">0</span></div>
+  <div class="bar"><div class="fill" id="rf" style="background:#3f8f5a"></div></div>
+  <div class="dlab"><span>OPERATOR &middot; HEAT</span><span id="pv">0</span></div>
+  <div class="bar"><div class="fill" id="pf" style="background:#b4402a"></div></div>
+  <div class="cap" id="dcap">&nbsp;</div>
+</div>
+
 <div id="brains"></div>
 
 <div class="panel" id="footer">
-  Six instances of one connectome. Five in chambers, one outside at a dial.<br>
-  The operator sets how much heat each chamber gets. It never sees them.<br>
+  Six instances of one connectome. Five mounted on pins, one outside at five
+  buttons.<br>
+  It is paid when one reaches full and burned for the ones it lets go cold.<br>
   <b>Nothing in the simulation experiences anything.</b>
 </div>
 
@@ -197,33 +228,21 @@ function makeChamber(x, isOperator) {
   const g = new THREE.Group();
   g.position.x = x;
 
-  // Plain alpha, NOT transmission.
+  // NO CAGE.
   //
-  // transmission:0.55 renders the glass in a separate pass that samples the
-  // scene behind it, and transparent objects inside that volume are dropped
-  // from what the pass captures. The wings are transparent and sit inside the
-  // box, so they were invisible through the glass and fine with it hidden.
-  // Confirmed by toggling the glass off: the wings appeared immediately.
+  // There used to be a glass box and a wireframe cube around each fly. They
+  // were doing the confinement work, and the mounting pin does that better:
+  // a box says "cannot leave", a pin through the thorax says "was never going
+  // to". Two objects making the same point meant the weaker one was reading
+  // as set dressing, and the boxes fought the shot, catching specular
+  // highlights and putting a bright line between the viewer and the fly.
   //
-  // Also render the glass last and skip depth writes, so it never occludes
-  // what is inside it.
-  const glass = new THREE.Mesh(
-    new THREE.BoxGeometry(1.5, 1.5, 1.5),
-    new THREE.MeshStandardMaterial({
-      color: '#9fb0c6', transparent: true, opacity: 0.055,
-      roughness: 0.2, metalness: 0,
-      side: THREE.DoubleSide, depthWrite: false,
-    })
-  );
-  glass.renderOrder = 10;
+  // `glass` is kept as an empty group so the G key and the recorder keep
+  // working rather than throwing on a missing object.
+  const glass = new THREE.Group();
+  glass.visible = false;
   g.add(glass);
-
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(1.5, 1.5, 1.5)),
-    new THREE.LineBasicMaterial({
-      color: isOperator ? '#6d9bd4' : '#555d6e', transparent: true, opacity: 0.9,
-    })
-  );
+  const edges = new THREE.Group();
   g.add(edges);
 
   // A clone of the real scan per chamber. Cloning shares geometry, so six
@@ -423,6 +442,29 @@ operator.group.scale.setScalar(0.92);
 // Turned towards the five. It still receives nothing from them; facing the
 // work is not the same as seeing it.
 operator.group.rotation.y = Math.PI;
+
+// Two lamps under the operator, one per half of its loop. Underlighting is
+// used rather than tinting the body, for the same reason the chambers are no
+// longer tinted: the fly keeps its own colour and the apparatus around it
+// carries the signal.
+//
+// They are placed low and close so the light stays on the operator and does
+// not wash across the five. What is done TO the operator should not look like
+// it is happening to everything.
+operator.rewardLamp = new THREE.PointLight('#48c46e', 0, 2.6, 2.2);
+operator.rewardLamp.position.set(0, -0.62, 0.34);
+operator.group.add(operator.rewardLamp);
+operator.punishLamp = new THREE.PointLight('#ff4a22', 0, 2.6, 2.2);
+operator.punishLamp.position.set(0, -0.62, -0.34);
+operator.group.add(operator.punishLamp);
+
+// Panel handles, looked up once. Missing nodes leave UI.rf undefined and the
+// frame loop skips the panel rather than throwing every frame.
+const UI = {
+  rf: document.querySelector('#rf'), pf: document.querySelector('#pf'),
+  rv: document.querySelector('#rv'), pv: document.querySelector('#pv'),
+  dcap: document.querySelector('#dcap'),
+};
 
 // ------------------------------------------------------------- readout
 const rows = document.querySelector('#rows');
@@ -681,15 +723,60 @@ function apply(f) {
     c.lamp.intensity = h * 1.9;
     c.pad.material.opacity = 0.12 + h * 0.34;
     c.pad.scale.setScalar(0.8 + h * 0.3);
-    c.edges.material.opacity = 0.35 + h * 0.5;
 
     labels[i].textContent = Math.round(h * 100) + '%';
     labels[i].style.color = h > 0.5 ? '#ff7a55' : (h > 0.2 ? '#c9a227' : '#6e6e74');
   }
 
-  // The operator is never heated, so its pin never glows. It is mounted on the
-  // same kind of pin as the five, which is the point: the thing at the buttons
-  // is held in place by the same apparatus as the things it is heating.
+  // ------------------------------------------------- the operator's own state
+  //
+  // The premise of the piece is that the thing at the buttons is not
+  // indifferent, and until now that was invisible: the operator looked like a
+  // fly sitting still while five others cooked. Both halves of its loop are
+  // shown, because either alone misleads. Reward alone makes it look rewarded,
+  // punishment alone makes it look like a sixth victim, and it is both at once.
+  //
+  // Values are real, recorded per step from the compulsion loop and normalised
+  // on export. Nothing here is invented for the visual.
+  const rw = DATA.reward ? DATA.reward[f] : 0;
+  const pn = DATA.punish ? DATA.punish[f] : 0;
+
+  if (UI.rf) {
+    UI.rf.style.width = (rw * 100).toFixed(1) + '%';
+    UI.pf.style.width = (pn * 100).toFixed(1) + '%';
+    UI.rv.textContent = rw.toFixed(2);
+    UI.pv.textContent = pn.toFixed(2);
+    // Brighten the bar as it fills, so a glance reads intensity and not only
+    // length. A short bar at full brightness reads as urgent when it is not.
+    UI.rf.style.opacity = (0.45 + rw * 0.55).toFixed(2);
+    UI.pf.style.opacity = (0.45 + pn * 0.55).toFixed(2);
+    // One line of plain language, because two bars do not say which is
+    // winning and that is the whole question.
+    UI.dcap.textContent =
+      rw > 0.55 && pn > 0.55 ? 'paid and burned at once'
+      : rw > 0.55 ? 'a chamber reached full'
+      : pn > 0.55 ? 'chambers left to go cold'
+      : pn > rw ? 'falling behind'
+      : 'holding';
+  }
+
+  // The same two signals on the operator itself, so the 3D view stands alone
+  // without the panel. Green from below when it is paid, red when it is
+  // burned. Underlighting rather than tinting the body: the fly keeps its own
+  // colour here for the same reason the chambers do.
+  operator.rewardLamp.intensity = rw * 3.4;
+  operator.punishLamp.intensity = pn * 3.0;
+
+  // The operator is never heated by a chamber, so its own pin never glows with
+  // chamber heat. It is mounted on the same kind of pin as the five, which is
+  // the point: the thing at the buttons is held in place by the same apparatus
+  // as the things it is heating. What DOES reach its pin is its own
+  // punishment, delivered through its own thermoreceptors.
+  operator.pinHot.material.emissiveIntensity = 0.2 + Math.pow(pn, 0.7) * 4.0;
+  operator.pinHot.material.emissive.setRGB(
+    0.45 + pn * 0.5, 0.1 + pn * pn * 0.3, 0.35 - pn * 0.3
+  );
+
   const opRate = rates[DATA.meta.operator];
   operator.core.material.emissiveIntensity = 0.5 + opRate * 2.2;
   operator.core.scale.setScalar(operator.core.userData.baseScale * (1 + opRate * 0.045));

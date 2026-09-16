@@ -81,6 +81,23 @@ def main() -> int:
         ).tolist(),
     }
 
+    # The operator's own state: what it is being paid and what it is being
+    # charged. Normalised independently because the two have different natural
+    # ranges, reward saturating near 1 while punishment grows without bound as
+    # neglect escalates. Both raw maxima are carried so the scene can show real
+    # numbers rather than only a bar.
+    drive = data.get("drive")
+    if drive is not None and len(drive):
+        d = drive[idx]
+        rmax = max(float(drive[:, 0].max()), 1e-9)
+        pmax = max(float(drive[:, 1].max()), 1e-9)
+        payload["reward"] = np.round(d[:, 0] / rmax, 4).tolist()
+        payload["punish"] = np.round(d[:, 1] / pmax, 4).tolist()
+        payload["meta"]["reward_max"] = round(rmax, 4)
+        payload["meta"]["punish_max"] = round(pmax, 4)
+        log.info("operator drive: reward peak %.3f, punishment peak %.3f",
+                 rmax, pmax)
+
     if ham is not None and len(ham):
         cum = np.cumsum(ham, axis=0)[idx]
         payload["divergence"] = np.round(
