@@ -203,7 +203,17 @@ class Dials:
     # clip wants 5 to 10 per second. 3000 steps is 300ms per decision, and
     # since a press lands in 26ms the chamber then simply sits held, which is
     # what "the operator is holding this one" should look like.
-    decide_every: int = 3000
+    # Measured across three runs, decisions per second and how it read:
+    #   every step   1720/s  vibration, no press ever completed
+    #   30ms           83/s  sawtooth, ~250 strokes at 5px each
+    #   300ms          13/s  a metronome: perfectly regular rotation, and
+    #                        motion fell to 26% with 67% spent at a rail
+    #
+    # At 300ms the cadence sets the rhythm rather than the operator's own
+    # activity. 100ms is just longer than the ~90ms a press takes to land, so
+    # a choice can complete, while leaving the brain enough say to break the
+    # regularity.
+    decide_every: int = 1000
 
     def update(self, spikes: np.ndarray, step: int) -> np.ndarray:
         """One step of operator spikes in, five heat levels out.

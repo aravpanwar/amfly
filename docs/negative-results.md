@@ -394,3 +394,42 @@ nothing at all. Whatever the mechanism, it is not something amplitude reaches.
 hard. Chambers must be heated from step 0 or they never separate. That collides
 directly with the authored 500 ms dial latency, which guarantees nothing is
 heated for the first 5,000 steps. The two cannot both be kept as they are.
+
+## 2026-09-16: a fixed decision cadence always looks like a metronome
+
+The buttons were unwatchable when the operator re-decided every step: 1,720
+transitions per second against a press that needs 26ms to land, so nothing ever
+completed and the chambers vibrated around mid-range.
+
+Adding a decision cadence fixed the vibration and introduced a worse problem.
+Four values, measured over 3s runs:
+
+| cadence | transitions/s | motion | pinned | reads as |
+|---|---|---|---|---|
+| every step | 1,720 | 99% | 29% | vibration, unreadable |
+| 30 ms | 83 | 94% | 40% | sawtooth, ~250 strokes at 5px |
+| 100 ms | 33 | 77% | 26% | regular interleaved sawtooth |
+| 300 ms | 13 | 26% | 67% | slow metronome, one chamber at a time |
+
+**Every value produces regularity.** A fixed clock imposes the rhythm, so the
+operator's activity only ever decides *which* chamber, never *when*. At 100ms
+the plot is five interleaved ramps of near-identical period; at 300ms it is a
+clean rotation. Neither reads as something choosing.
+
+The chamber means give it away: at 100ms four of the five sat at 58, 59, 59 and
+58 percent. That is a round-robin, not a preference.
+
+**So the cadence is the wrong lever**, and this should not be tuned further.
+Options not yet tried:
+
+1. Let the operator's own activity gate *when* a decision happens, for instance
+   re-deciding on a burst in its descending neurons rather than on a timer. The
+   rhythm would then come from the brain.
+2. Drop the cadence and slow the press and release instead, so a decision every
+   step still produces slow visible movement. The earlier vibration came from
+   26ms presses, not from the decision rate itself.
+3. Accept the sawtooth and choose a cadence for looks alone, declaring in the
+   README that the pacing is authored.
+
+Option 2 is the most promising and the simplest: it was never tested, because
+the cadence was added and the press rate slowed in the same change.
