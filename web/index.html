@@ -161,11 +161,13 @@ scene.add(new THREE.HemisphereLight('#93a6c8', '#1b1b22', 1.15));
 const key = new THREE.DirectionalLight('#ffffff', 1.5);
 key.position.set(4, 9, 6);
 key.castShadow = true;
-// 2048, not 4096. Tightening the camera from a 24-unit box to 15 already
-// bought 1.6x the resolution per unit, and six maps at 4096 would be 88 MB of
-// shadow buffers on a 6GB laptop that is also holding six 272k-triangle
-// flies. 2048 over 15 units still resolves a cable at 4.4 texels.
-key.shadow.mapSize.set(2048, 2048);
+// The only shadow map in the scene, so it carries everything.
+//
+// 3072 rather than 4096: over a 15 unit box that is 0.0049 units per texel,
+// which keeps every thin part above four texels (pin 4.9, cable 6.6, leg 4.1)
+// for half the memory of 4096. 67 MB in a single buffer is a lot to ask of a
+// 6GB laptop that is also holding six 272k-triangle flies.
+key.shadow.mapSize.set(3072, 3072);
 // Fit the shadow camera to what is actually there.
 //
 // It used to be a 24 by 24 box around a scene about 11 by 9, so more than
@@ -200,14 +202,20 @@ for (let i = 0; i < 5; i++) {
   const sp = new THREE.SpotLight('#cfe0ff', 22, 9, 0.42, 0.55, 1.6);
   sp.position.set((i - 2) * 1.72, 4.2, 0);
   sp.target.position.set((i - 2) * 1.72, -1, 0);
-  sp.castShadow = true;
-  // 1024 is enough for one specimen's pool. Five 2048 maps would cost more
-  // than the key light and show less.
-  sp.shadow.mapSize.set(1024, 1024);
-  sp.shadow.camera.near = 1.5;
-  sp.shadow.camera.far = 9;
-  sp.shadow.bias = -0.0005;
-  sp.shadow.normalBias = 0.02;
+  // These do NOT cast, and that is the point of having only one caster.
+  //
+  // Turning them on gave every fly two shadows: one angled from the key at 51
+  // degrees and one straight down from here at 90. Both were sharp and both
+  // were near full strength, so neither read as dominant and the pair looked
+  // like a rendering error rather than like lighting. A single caster is what
+  // makes a shadow read as a shadow.
+  //
+  // The key keeps the job because its shadow falls to the side where it can
+  // be seen and where it connects the fly to its plate. A straight-down
+  // shadow sits under the body, mostly hidden by the body, and grounds
+  // nothing. These lamps still do the work they were added for: a hard pool
+  // of light on each specimen.
+  sp.castShadow = false;
   scene.add(sp, sp.target);
 }
 
