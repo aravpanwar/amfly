@@ -55,6 +55,13 @@ def main() -> int:
                     help="scales the differences between DN blocks")
     ap.add_argument("--escalate", type=float, default=None,
                     help="how fast neglect debt accumulates")
+    ap.add_argument("--switch-margin", type=float, default=None,
+                    help="how decisively a chamber must win before it takes a "
+                         "button from one already held. Low values let the "
+                         "middle chambers braid together at mid-range")
+    ap.add_argument("--press-rate", type=float, default=None,
+                    help="steps for a button to raise a chamber through its "
+                         "full range, e.g. 2000 for 200ms at dt=0.1ms")
     ap.add_argument("--no-compulsion", action="store_true",
                     help="original design: the operator gets no feedback at all")
     ap.add_argument("--record-sample", type=int, default=2000,
@@ -132,6 +139,13 @@ def main() -> int:
         dial.debt_bias = args.debt_bias
     if args.contrast is not None:
         dial.contrast = args.contrast
+    if args.switch_margin is not None:
+        dial.switch_margin = args.switch_margin
+    if args.press_rate is not None:
+        # Keep release slower than press, in the measured 2.5x ratio, so a
+        # chamber still falls more slowly than it rises.
+        dial.press_rate = 1.0 / args.press_rate
+        dial.release_rate = 1.0 / (args.press_rate * 2.5)
     _loads = [float(dn_out[np.searchsorted(dn, b)].sum()) for b in dial._blocks]
     log.info("DN block synaptic load: %s (spread %.2fx)",
              [int(v) for v in _loads], max(_loads) / max(min(_loads), 1))
@@ -238,6 +252,8 @@ def main() -> int:
                 "seconds": round(elapsed, 1),
                 "backend": describe(),
                 "grip": dial.grip,
+                "switch_margin": dial.switch_margin,
+                "press_rate_steps": round(1.0 / dial.press_rate),
                 "compulsion": comp.summary() if comp is not None else None,
             },
             indent=2,

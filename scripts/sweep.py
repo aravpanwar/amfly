@@ -36,11 +36,16 @@ log = logging.getLogger("amfly.sweep")
 # The grid. Kept small deliberately: a 3s run is about 10 minutes, so seven
 # hours is roughly 40 runs. Better to explore a few axes properly than to
 # sample a large space once each.
+# switch-margin is first because it is the parameter that decides whether the
+# piece reads at all. Below about 0.2 the three unheld chambers braid together
+# at mid-range and only two of five move; see docs/negative-results.md. The
+# range here brackets the 0.40 chosen by replay, which was measured against
+# recorded operator spikes and needs confirming in closed loop.
 GRID = {
+    "switch-margin": [0.25, 0.40, 0.60],
+    "press-rate": [1200.0, 2000.0, 3500.0],
     "grip": [2, 3],
-    "debt-bias": [0.0, 1.1, 2.5],
-    "contrast": [2.0, 3.0, 4.5],
-    "escalate": [0.0009, 0.003],
+    "debt-bias": [0.0, 1.1],
 }
 
 
@@ -59,6 +64,11 @@ def score(run_dir: Path) -> dict:
     reach = [float((lv[:, i] > 0.5).mean()) for i in range(5)]
     # Rails: time pinned at either extreme, which reads as a flat line.
     pinned = float(((lv > 0.97) | (lv < 0.18)).mean())
+    # Braid: chambers sitting together at mid-range, the failure mode that
+    # per-step decisions produce. Measured per frame, not per step: a
+    # per-step threshold measures the press rate rather than the system.
+    fr = lv[::330]
+    braid = float((np.abs(np.diff(fr, axis=0)).max(axis=1) < 0.005).mean())
 
     prov = json.loads((run_dir / "provenance.json").read_text())
     comp = prov.get("compulsion") or {}
@@ -67,6 +77,7 @@ def score(run_dir: Path) -> dict:
         "motion": round(motion, 4),
         "min_reach": round(min(reach), 4),
         "pinned": round(pinned, 4),
+        "braid": round(braid, 4),
         "reward": round(comp.get("mean_reward", 0), 4),
         "punish": round(comp.get("mean_punish", 0), 4),
         "neglected": round(comp.get("mean_neglected_chambers", 0), 3),
@@ -92,6 +103,10 @@ def main() -> int:
     csv_path = args.out / "sweep.csv"
     combos = list(itertools.product(*GRID.values()))
     keys = list(GRID.keys())
+    # Interleave so an interrupted sweep still spans the whole grid rather
+    # than finishing one corner of it. The laptop has been closed mid-run
+    # before and will be again.
+    combos.sort(key=lambda c: (sum(GRID[k].index(v) for k, v in zip(keys, c)), c))
 
     log.info("%d combinations, budget %.1f h", len(combos), args.hours)
     deadline = time.time() + args.hours * 3600
