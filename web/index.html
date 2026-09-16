@@ -187,8 +187,20 @@ key.shadow.camera.near = 0.5; key.shadow.camera.far = 22;
 // geometry; constant bias alone either leaves acne or detaches the shadow
 // from whatever casts it. The fly's shadows were switched off entirely
 // because of acne that this fixes properly.
-key.shadow.bias = -0.0004;
-key.shadow.normalBias = 0.022;
+// normalBias must sit BELOW the radius of the thinnest thing that should
+// cast, because it offsets the shadow lookup along the surface normal and
+// anything narrower than the offset is stepped clean over.
+//
+// At 0.022 it exactly equalled the monitor post's radius, so the posts threw
+// no shadow at all, and the cables at 0.016 and the heated pin segment at
+// 0.0105 were erased with them. The scene looked correct everywhere else,
+// which is why it took a while to find: only the thin objects were missing.
+//
+// 0.005 clears every caster here, the thinnest being the 0.0105 pin segment.
+// The constant bias takes up the slack for the flat plates and benches, where
+// acne appears first.
+key.shadow.bias = -0.0009;
+key.shadow.normalBias = 0.005;
 scene.add(key);
 // Fill goes back up. In a dark room nothing bounces, so without it the side
 // of every object away from the key falls to pure black and the shapes stop
@@ -478,12 +490,11 @@ function makeChamber(x, isOperator) {
     })
   );
   pinShaft.position.y = (PIN_TOP + PIN_BOT) / 2;
-  // The bare shaft no longer casts. At 0.0124 across it is 2.5 texels in a
-  // 3072 map over 15 units, and under about 2 texels a shadow breaks into
-  // dashes: a dashed line under a solid pin looks like a rendering fault. The
-  // heated segment (4.3 texels) and the head still cast, so the pin is still
-  // grounded where it matters.
-  pinShaft.castShadow = false;
+  // 2.5 texels in a 3072 map over 15 units, which is thin but above the point
+  // where a shadow breaks into dashes. It was switched off while normalBias
+  // was 0.022, where nothing this narrow cast anything anyway; at 0.005 it
+  // resolves, and a pin with no shadow at all read as floating.
+  pinShaft.castShadow = true;
   g.add(pinShaft);
 
   // The heated segment, sitting where the pin passes through the thorax.
