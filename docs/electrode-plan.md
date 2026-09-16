@@ -200,3 +200,43 @@ wired, reachable, and ringing it does nothing.**
 Whether to ship the direct motor drive at all. It is a real result either way
 and both options are defensible; what is not defensible is showing a
 convulsion and implying the fly produced it.
+
+## Shipped: the convulsion, and where the honesty lives
+
+The flies convulse. The 708 VNC motor neurons are driven directly alongside
+the electrode, scaled by chamber level.
+
+**No label in the scene.** This is an art piece, not a paper or a production
+system, and an on-screen disclaimer would clutter the one thing the scene is
+for. The declaration lives in the README, in full, where it can be read
+properly rather than skimmed over a shot.
+
+What the README must say, plainly:
+
+> The bodies convulse because current is injected directly into 708 motor
+> neurons. That is an authored intervention. It is not an escape reflex: the
+> escape circuit is present in the connectome and reachable from the
+> stimulation site, and driving it produces no motor change in this model at
+> any amplitude.
+
+### The fix that made it work
+
+Driving the motor stage only during a pulse gave 1.16x and saturated there.
+At 50 Hz a pulse is 4 steps in 200, so the drive was off 98% of the time, and
+a body that moves only inside a 0.4 ms window flickers rather than convulses.
+
+Held continuously between pulses, with a 1.6x kick on the pulse itself so the
+discharge still lands:
+
+| motor drive | motor spikes | vs off |
+|---|---|---|
+| off | 6,532 | 1.00x |
+| 25 mV | 11,008 | 1.69x |
+| 60 mV | 13,045 | 2.00x |
+| 100 mV | 14,302 | 2.19x |
+
+60 mV doubles motor firing, against the roughly 3% that heat moved it by.
+
+**Isolation still holds.** With chamber 0 stimulated and the motor drive
+active, spikes per instance are [1029552, 0, 0, 0, 0, 0]: every other chamber
+and the operator sit at exactly zero.

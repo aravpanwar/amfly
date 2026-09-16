@@ -173,6 +173,22 @@ class Electrode:
     n_instances: int
     amplitude_mv: float = 8.0
     radius: float = 6000.0
+    # Motor neurons driven alongside the electrode, so the body actually moves.
+    #
+    # This is an authored intervention and the README says so. It is NOT the
+    # escape reflex: the escape circuit is present in the dataset and driving
+    # it does nothing here. Measured, the 12 escape command neurons give 3,713
+    # motor spikes at 20 mV and 3,686 at 400 mV, saturating immediately, and
+    # against the phasic baseline the real runs use the result is 0.92x, very
+    # slightly FEWER motor spikes than with escape off, because the network is
+    # already saturated and the extra input lands on refractory neurons.
+    #
+    # Driving the 708 VNC motor neurons directly does scale: 1.20x at 10 mV,
+    # 1.43x at 25 mV, 1.75x at 60 mV. That is current injected into the output
+    # stage, bypassing the command neurons that would normally decide to fire
+    # it, which is the honest description and the one the README carries.
+    motor_indices: np.ndarray | None = None
+    motor_mv: float = 60.0
     # Pulse shape. 0.4ms at dt=0.1ms is 4 steps, within the range used for
     # real intracellular stimulation and long enough to matter against a 20ms
     # membrane time constant.
@@ -212,6 +228,10 @@ class Electrode:
             dtype=np.int64,
         )
         self._firing = np.zeros(len(CHAMBERS), dtype=np.int64)
+        self._motor = (
+            None if self.motor_indices is None
+            else np.asarray(self.motor_indices, dtype=np.int64)
+        )
 
     def injection(self, levels: np.ndarray, step: int) -> np.ndarray:
         """levels: (n_chambers,) in 0..1. Returns (N, n_instances) injection.
@@ -239,6 +259,21 @@ class Electrode:
             if (step + int(self._phase[c])) % period < self.pulse_steps:
                 self._buf[:, c] = self._weights * self.amplitude_mv
                 self._firing[c] = step
+
+            # The motor stage is driven CONTINUOUSLY, not only on the pulse.
+            #
+            # Driving it on the pulse alone gave 1.16x and saturated there,
+            # because at 50 Hz a pulse is 4 steps in 200 and the drive was off
+            # 98% of the time. A body that only moves during a 0.4 ms window
+            # is not convulsing, it is flickering.
+            #
+            # Held between pulses it reaches the 1.75x measured standalone.
+            # Scaled by level, so a chamber at 20% twitches and one at full
+            # thrashes, and scaled again inside the pulse so the discharge
+            # still lands as a kick on top of the sustained drive.
+            if self._motor is not None:
+                kick = 1.6 if self._firing[c] == step else 1.0
+                self._buf[self._motor, c] += self.motor_mv * lv * kick
 
         self._levels[OPERATOR] = 0.0
         return self._buf

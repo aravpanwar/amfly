@@ -24,12 +24,12 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from amfly.config import CHAMBERS, LIF, OPERATOR  # noqa: E402
-from amfly.data.loader import load, verify_counts  # noqa: E402
+from amfly.data.loader import load, soma_positions, verify_counts  # noqa: E402
 from amfly.io.spikes import Recorder  # noqa: E402
 from amfly.sim.backend import configure_torch_determinism, describe  # noqa: E402
 from amfly.sim.divergence import Divergence  # noqa: E402
 from amfly.sim.engine import Engine, State  # noqa: E402
-from amfly.wiring.chambers import ContinuousHeat  # noqa: E402
+from amfly.wiring.chambers import ContinuousHeat, Electrode  # noqa: E402
 from amfly.wiring.compulsion import (  # noqa: E402
     Compulsion, resolve_reward_neurons,
 )
@@ -76,6 +76,16 @@ def main() -> int:
                     help="phasic drive period; tonic drive synchronises the "
                          "network and suppresses divergence")
     ap.add_argument("--pulse-width-ms", type=float, default=0.5)
+    ap.add_argument("--heat", action="store_true",
+                    help="use the original thermal channel into 25 TRN_VP "
+                         "thermoreceptors instead of the electrode")
+    ap.add_argument("--no-convulse", action="store_true",
+                    help="electrode without the direct motor drive, so the "
+                         "bodies stay still")
+    ap.add_argument("--motor-mv", type=float, default=60.0,
+                    help="amplitude into the 708 VNC motor neurons. Measured "
+                         "against the real baseline: 1.20x at 10, 1.43x at "
+                         "25, 1.75x at 60")
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--cpu", action="store_true",
                     help="force the numpy reference backend even if CUDA works")
@@ -152,7 +162,42 @@ def main() -> int:
     if args.dial_latency_ms is not None:
         dial.latency_steps = max(1, int(round(args.dial_latency_ms / lif.dt_ms)))
         log.info("dial latency overridden to %.0f ms", args.dial_latency_ms)
-    heat = ContinuousHeat(th, c.n, 6)
+    # Electrical stimulation, not heat.
+    #
+    # Heat implied cooking, which this model cannot represent: no tissue
+    # damage, no nociception, nothing that degrades. What the simulation
+    # literally does is inject millivolts of depolarising current, so an
+    # electrode is the accurate description and millivolts the real unit.
+    #
+    # The electrode has a POSITION and stimulates by distance, which is what
+    # makes it defensible: 5,579 neurons across seven superclasses rather than
+    # 25 cells of one type, graded by a Gaussian falloff. A shock does not
+    # select for function. The thermoreceptors it replaces have no soma
+    # coordinates at all, 0 of 25, so the old channel could never have been
+    # placed in space even in principle.
+    if args.heat:
+        heat = ContinuousHeat(th, c.n, 6)
+        log.info("stimulus: legacy thermal channel, %d TRN_VP neurons", len(th))
+    else:
+        xyz = soma_positions(c.body_ids)
+        types = c.cell_type.astype(str)
+        esc = np.flatnonzero(np.char.startswith(types, "DNp01"))
+        if len(esc) == 0:
+            raise SystemExit("DNp01 not found; cannot site the electrode")
+        site = xyz[esc[0]]
+        motor = (
+            None if args.no_convulse
+            else np.flatnonzero(c.superclass.astype(str) == "vnc_motor")
+        )
+        heat = Electrode(
+            soma_xyz=xyz, site=site, n_neurons=c.n, n_instances=6,
+            motor_indices=motor, motor_mv=args.motor_mv,
+        )
+        log.info(
+            "stimulus: electrode at %s, %d neurons reached, motor drive %s",
+            site.round(0).tolist(), heat.reached,
+            "off" if motor is None else f"{len(motor)} at {args.motor_mv:.0f}mV",
+        )
     rec = Recorder.build(c.n, 6, dn, th, sample=args.record_sample)
 
     # Close the loop: chamber state reaches the operator. Reward through the
@@ -184,7 +229,8 @@ def main() -> int:
     log.info("running %d steps (%.1f ms simulated)", steps, args.ms)
     t0 = time.time()
     for t in range(steps):
-        heat_inj = heat.injection(dial.levels)
+        heat_inj = (heat.injection(dial.levels) if args.heat
+                    else heat.injection(dial.levels, t))
         inj = zeros()
         if use_cuda:
             inj += torch.from_numpy(heat_inj).to("cuda")
