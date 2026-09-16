@@ -98,7 +98,7 @@
   <b>Nothing in the simulation experiences anything.</b>
 </div>
 
-<div class="panel" id="hint">drag to orbit &middot; scroll to zoom &middot; <b>R</b> record &middot; <b>S</b> sound</div>
+<div class="panel" id="hint">drag to orbit &middot; scroll to zoom &middot; <b>F</b> take &middot; <b>C</b> camera &middot; <b>R</b> record &middot; <b>S</b> sound</div>
 <div class="panel" id="rec" style="top:0;left:50%;transform:translateX(-50%);display:none;color:#ff5a45">
   <span style="font-size:11px">&#9679; RECORDING <span id="recT">0.0</span>s &middot; press R to stop</span>
 </div>
@@ -787,6 +787,99 @@ const UI = {
   dcap: document.querySelector('#dcap'),
 };
 
+// -------------------------------------------------------------- camera move
+//
+// A scripted path, so a take is one keypress instead of an orbit performed by
+// hand while recording. Every take is then identical, which matters because
+// the clip is the deliverable and a shot that cannot be repeated cannot be
+// improved.
+//
+// Free orbit is untouched. The path runs on its own key, takes the controls
+// for its duration, and hands them back where it finished so the view can be
+// adjusted from there rather than snapping.
+//
+// Positions are in the scene's real coordinates: the chamber row spans x
+// -3.44 to 3.44 at z=0, the operator sits at z=-3.6, the console at z=-1.8,
+// and a fly's body centre is at y=0.061.
+const SHOT = [
+  // Wide and high, the whole bench in frame. The room reads first, the
+  // specimens second.
+  { t: 0.0,  pos: [0.0, 4.6, 15.5], look: [0, 0.2, -1.2], fov: 40 },
+  // Drift in and down. Still wide enough to hold all five.
+  { t: 0.22, pos: [-2.2, 3.0, 10.0], look: [-0.6, 0.1, -1.0], fov: 38 },
+  // Down to bench height, close to the row. The pins and cables become
+  // legible here, which is the moment the apparatus explains itself.
+  { t: 0.42, pos: [-3.6, 0.55, 4.6], look: [-1.4, 0.0, -0.9], fov: 34 },
+  // Track along the row, past the flies, following the cable run back.
+  { t: 0.62, pos: [1.2, 0.42, 3.4], look: [0.4, -0.15, -1.6], fov: 32 },
+  // Rise slightly and turn onto the operator, the thing doing it.
+  { t: 0.82, pos: [2.6, 1.15, -0.4], look: [0.2, -0.1, -3.4], fov: 35 },
+  // Pull back out to a composed wide, a little off axis so it does not
+  // simply return to where it started.
+  { t: 1.0,  pos: [3.4, 3.2, 9.2], look: [0, 0.1, -1.2], fov: 38 },
+];
+const SHOT_SECONDS = 26;
+
+const shot = { on: false, t0: 0 };
+
+// Catmull-Rom through the keyframes, so the move has no corners. Sampling the
+// position and the look-at on separate curves keeps the turn independent of
+// the travel, which is what stops the camera swinging as it passes a subject.
+const shotPos = new THREE.CatmullRomCurve3(
+  SHOT.map(k => new THREE.Vector3(...k.pos)), false, 'catmullrom', 0.5
+);
+const shotLook = new THREE.CatmullRomCurve3(
+  SHOT.map(k => new THREE.Vector3(...k.look)), false, 'catmullrom', 0.5
+);
+
+// Ease in and out. A linear pass starts and stops abruptly, which reads as a
+// machine move; this reads as a camera operator.
+function easeInOut(x) {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+function startShot() {
+  shot.on = true;
+  shot.t0 = performance.now();
+  controls.enabled = false;
+  return 'shot running';
+}
+
+function stopShot() {
+  shot.on = false;
+  controls.enabled = true;
+  // Hand the orbit back where the camera actually is, so releasing control
+  // does not snap the view somewhere else.
+  const look = shotLook.getPoint(1);
+  controls.target.copy(look);
+  controls.update();
+  return 'shot done';
+}
+
+function updateShot() {
+  if (!shot.on) return;
+  const raw = (performance.now() - shot.t0) / (SHOT_SECONDS * 1000);
+  if (raw >= 1) { stopShot(); return; }
+  const u = easeInOut(raw);
+  camera.position.copy(shotPos.getPoint(u));
+  camera.lookAt(shotLook.getPoint(u));
+  // Focal length rides the keyframes too. Tightening as the camera closes in
+  // compresses the row and makes the five read as a line of specimens rather
+  // than as five separate objects.
+  let fov = SHOT[0].fov;
+  for (let i = 1; i < SHOT.length; i++) {
+    if (u <= SHOT[i].t) {
+      const a = SHOT[i - 1], b = SHOT[i];
+      const k = (u - a.t) / Math.max(b.t - a.t, 1e-6);
+      fov = a.fov + (b.fov - a.fov) * k;
+      break;
+    }
+    fov = SHOT[i].fov;
+  }
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
+}
+
 // ------------------------------------------------------------- readout
 const rows = document.querySelector('#rows');
 const labels = [];
@@ -1195,6 +1288,10 @@ function animate() {
     if (t >= DATA.meta.frames / DATA.meta.fps) stopRec();
   }
   apply(frame);
+  // The shot drives the camera directly, so the orbit must not also write to
+  // it on the same frame; controls.enabled is false for the shot's duration
+  // and update() then only settles damping.
+  updateShot();
   controls.update();
   renderer.render(scene, camera);
 }
@@ -1209,12 +1306,20 @@ addEventListener('resize', () => {
 // Debug handle: inspect actual world transforms from the console.
 window.__amfly = {
   chambers, operator, scene, camera, THREE,
-  // Press G to toggle the glass. Transmissive materials render in a separate
-  // pass that samples the scene behind them, and transparent objects inside
-  // that volume are commonly dropped from what the pass captures.
-  glass(on) {
-    for (const c of chambers.concat([operator])) c.glass.visible = on;
-    return 'glass ' + (on ? 'on' : 'off');
+  // Camera work from the console, which is how the SHOT keyframes were
+  // found. `where()` prints the current position and target in the exact
+  // shape a keyframe takes, so a view can be framed by hand and pasted
+  // straight into SHOT.
+  shot: { start: startShot, stop: stopShot, path: SHOT },
+  where() {
+    const t = controls.target;
+    const p = camera.position;
+    const f = n => Math.round(n * 100) / 100;
+    const line = `{ t: 0.0, pos: [${f(p.x)}, ${f(p.y)}, ${f(p.z)}], ` +
+                 `look: [${f(t.x)}, ${f(t.y)}, ${f(t.z)}], ` +
+                 `fov: ${f(camera.fov)} },`;
+    console.log(line);
+    return line;
   },
   wingInfo() {
     const c = chambers[0];
@@ -1381,10 +1486,15 @@ addEventListener('keydown', e => {
   if (e.key === 'r' || e.key === 'R') {
     recorder ? stopRec() : startRec();
   }
-  if (e.key === 'g' || e.key === 'G') {
-    const on = !chambers[0].glass.visible;
-    for (const c of chambers.concat([operator])) c.glass.visible = on;
-    console.log('[amfly] glass', on ? 'on' : 'off');
+  if (e.key === 'c' || e.key === 'C') {
+    console.log('[amfly]', shot.on ? stopShot() : startShot());
+  }
+  // Shot and recording in one keypress, which is how a take should be made:
+  // the recorder starts, the camera runs, and both stop on their own.
+  if (e.key === 'f' || e.key === 'F') {
+    if (!recorder) startRec();
+    if (!shot.on) startShot();
+    console.log('[amfly] take: recording + shot');
   }
 });
 animate();
