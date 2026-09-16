@@ -97,3 +97,27 @@ through other projects' READMEs. v1.0 is 166,700.
 Everything published is computed from the pinned files and asserted in
 `tests/test_loader.py`, so a changed download fails loudly rather than quietly
 producing a different piece.
+
+## Buttons switch on a margin, never on a clock
+
+A held button keeps its slot until another chamber beats it by
+`switch_margin`. There is no timer anywhere in the selection path.
+
+This was not the first design. Re-deciding on a fixed cadence was tried at
+four values and every one of them produced a regular pattern, because a clock
+decides *when* the operator acts and leaves it only the choice of *which*. At
+100ms four of the five chambers sat within one percent of each other, which is
+a round robin rather than a preference. Removing the cadence was worse: the
+grip is then re-auctioned every step, so the three unheld chambers receive
+press and release in near-equal alternation and cancel out into a flat braid at
+mid-range.
+
+A margin fixes both because it makes switching depend on the *size* of the
+difference rather than on elapsed time. Small fluctuations are ignored, a
+decisive block takes the slot, and the rhythm therefore comes from the
+connectome rather than from a constant.
+
+The value, 0.40, is authored and must be declared in the README. What it
+controls is how decisive the operator must be before it changes its mind, not
+which chamber it picks. Below about 0.2 the braid returns, because the margin
+is then smaller than the fluctuation it exists to ignore.
