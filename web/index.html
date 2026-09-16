@@ -570,6 +570,60 @@ function makeChamber(x, isOperator) {
   g.add(probe);
   }
 
+  // A micromanipulator to hold the electrode up.
+  //
+  // Nothing was carrying the probe's weight, so it read as balanced on the
+  // animal's head, and a fly's neck holding a steel electrode and its cable is
+  // the kind of detail that undoes everything else. In a real rig the
+  // electrode never touches the preparation's own structure: it is held by an
+  // arm bolted to the stage, and the animal is positioned under it.
+  //
+  // Post behind the fly on the base plate, arm reaching forward over it, clamp
+  // gripping the probe. That also explains the cable, which now runs to a
+  // connector on the arm rather than appearing to tug on the head.
+  let clamp = null;
+  if (isOperator) {
+    const armMat = new THREE.MeshStandardMaterial({
+      color: '#2a2f37', roughness: 0.42, metalness: 0.82,
+    });
+
+    // Upright post, standing on the plate behind the specimen.
+    const mPost = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.034, 0.044, 1.05, 12), armMat
+    );
+    mPost.position.set(0, -0.22, 0.62);
+    mPost.castShadow = true;
+    g.add(mPost);
+
+    // A foot bolted to the plate.
+    const mFoot = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.085, 0.10, 0.04, 14), armMat
+    );
+    mFoot.position.set(0, -0.725, 0.62);
+    mFoot.castShadow = true; mFoot.receiveShadow = true;
+    g.add(mFoot);
+
+    // Horizontal arm reaching forward to sit over the electrode.
+    const mArm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.07, 0.07, 0.86), armMat
+    );
+    mArm.position.set(0, 0.30, 0.22);
+    mArm.castShadow = true;
+    g.add(mArm);
+
+    // The clamp that actually grips the probe, at the arm's far end.
+    const mClamp = new THREE.Mesh(
+      new THREE.BoxGeometry(0.10, 0.13, 0.09),
+      new THREE.MeshStandardMaterial({
+        color: '#1b1f25', roughness: 0.38, metalness: 0.85,
+      })
+    );
+    mClamp.position.set(0, 0.275, -0.17);
+    mClamp.castShadow = true;
+    g.add(mClamp);
+    clamp = mClamp;
+  }
+
   // The connector the cable lands on, so the wire terminates on hardware
   // rather than vanishing into the animal.
   const probeCap = isOperator ? new THREE.Mesh(
@@ -744,7 +798,7 @@ function makeChamber(x, isOperator) {
   g.position.y = BENCH_TOP + 0.79;
   scene.add(g);
   return { group: g, core, glass, lamp, edges, isOperator,
-           pinHot, pinShaft, pinHead, base, probe, probeCap,
+           pinHot, pinShaft, pinHead, base, probe, probeCap, clamp,
            vCtx, vTex, screen, _vShown: -1 };
 }
 
@@ -967,8 +1021,18 @@ function hang(from, to, sag, floorY) {
 // animal rather than against the hardware in it. It now leaves the connector
 // on top of the electrode, so the chain is the operator's brain, the probe,
 // the cable, the panel: the only fly in the room that is wired into anything.
+// Land on the CLAMP, not the electrode's own connector.
+//
+// A cable pulling directly on a hair-thin probe would be carried by the
+// animal's head, which is the thing the manipulator exists to avoid. It runs
+// to the arm that holds the probe, and the arm takes the load: that is how a
+// real rig is put together and it is also the only version where the fly is
+// not supporting a steel electrode and its wire by the neck.
 const opHead = new THREE.Vector3();
-if (operator.probeCap) {
+if (operator.clamp) {
+  operator.clamp.getWorldPosition(opHead);
+  opHead.y += 0.05;
+} else if (operator.probeCap) {
   operator.probeCap.getWorldPosition(opHead);
 } else {
   const h = operator.core.getObjectByName('head');
