@@ -557,16 +557,31 @@ for (let i = 0; i < CH; i++) {
 // Curves rather than straight lines, so they hang like cable instead of
 // reading as a diagram. TubeGeometry is built once per wire; only the
 // material changes per frame.
-function wire(from, to, sag, colour) {
-  const mid = from.clone().add(to).multiplyScalar(0.5);
-  mid.y -= sag;
-  // A cable lies ON the bench, it does not pass through it. The sag used to
-  // be applied blind and every wire dipped under the surface and came back
-  // out, which read as the wires phasing through the furniture.
-  mid.y = Math.max(mid.y, BENCH_TOP + 0.03);
-  const curve = new THREE.CatmullRomCurve3([from, mid, to]);
+function wire(points, colour, radius) {
+  // One continuous curve through every point, not a chain of short tubes.
+  //
+  // Each cable used to be two separate TubeGeometries meeting at the plate
+  // edge. Two tubes that share an endpoint do not share a tangent, so the
+  // join showed as a hard corner however finely each half was subdivided.
+  // A single curve through all the points has a continuous tangent by
+  // construction, which is what makes it read as one cable.
+  //
+  // 'catmullrom' with a low tension rather than the default 'centripetal'.
+  // Centripetal avoids cusps when control points bunch up, but these are
+  // spaced along a hanging run and the uniform form gives a rounder, slacker
+  // line through them.
+  const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.28);
   const mesh = new THREE.Mesh(
-    new THREE.TubeGeometry(curve, 28, 0.016, 7, false),
+    // Segment count scales with length so a long span is not coarser than a
+    // short one. Eight radial segments rather than seven: at this thickness
+    // the silhouette is what shows, and an odd count leaves a flat facet
+    // facing the camera.
+    new THREE.TubeGeometry(
+      curve,
+      Math.max(36, Math.round(curve.getLength() * 34)),
+      radius === undefined ? 0.016 : radius,
+      8, false
+    ),
     new THREE.MeshStandardMaterial({
       color: colour, roughness: 0.62, metalness: 0.35,
       emissive: new THREE.Color('#ff3b10'), emissiveIntensity: 0,
@@ -574,6 +589,37 @@ function wire(from, to, sag, colour) {
   );
   scene.add(mesh);
   return mesh;
+}
+
+// A hanging run between two points, as a set of control points rather than a
+// single midpoint. A real cable does not sag as one symmetric arc: it leaves
+// its anchor almost horizontally, falls through the middle, and comes back up
+// into the far anchor. Three interior points give that shape; one gives a V.
+function hang(from, to, sag, floorY) {
+  // The sag is limited by the room under the lower anchor, not chosen freely.
+  //
+  // A requested sag deeper than that space gets clamped at every interior
+  // point, and a clamp that catches every point does not make a shallower
+  // curve, it makes a flat bar with a corner at each end: exactly the sharp
+  // angle this is meant to avoid. Measured here, a sag of 0.42 against 0.033
+  // of headroom clamped all three points to the same height.
+  //
+  // Fitting the sag to the space keeps the curve a curve. The 0.8 leaves the
+  // deepest point just clear of the floor rather than resting on it.
+  let s = sag;
+  if (floorY !== undefined) {
+    s = Math.min(sag, Math.max(0, (Math.min(from.y, to.y) - floorY) * 0.8));
+  }
+  const pts = [from.clone()];
+  for (const t of [0.2, 0.4, 0.6, 0.8]) {
+    const q = from.clone().lerp(to, t);
+    // sin gives the deepest point in the middle and eases off at both ends,
+    // so the curve meets each anchor smoothly instead of arriving at an angle.
+    q.y -= s * Math.sin(Math.PI * t);
+    pts.push(q);
+  }
+  pts.push(to.clone());
+  return pts;
 }
 
 // Head wire: the operator's neck connective to the back of the panel. One
@@ -591,9 +637,12 @@ const opHead = new THREE.Vector3();
   }
 }
 const headWire = wire(
-  opHead.clone(),
-  new THREE.Vector3(0, PANEL_Y + 0.05, PANEL_Z - 0.28),
-  0.34, '#3a3f49'
+  hang(
+    opHead.clone(),
+    new THREE.Vector3(0, PANEL_Y + 0.05, PANEL_Z - 0.28),
+    0.30, BENCH_TOP + 0.03
+  ),
+  '#3a3f49', 0.018
 );
 
 // Five wires out to the pins, one per chamber, in chamber order.
@@ -630,20 +679,24 @@ for (let i = 0; i < CH; i++) {
     pinPos.x, plateTop.y, pinPos.z + (PANEL_Z < pinPos.z ? -half : half)
   );
 
-  // Both segments belong to chamber i, so they are kept together and lit as
-  // one cable. Pushing them flat would have made chamberWires ten long while
-  // the frame loop indexes it by chamber, leaving five segments permanently
-  // dark.
-  const span = wire(
+  // ONE cable per chamber, from the panel to the foot of the pin.
+  //
+  // The hanging span and the length lying on the plate used to be two
+  // separate tubes meeting at the plate edge. They shared an endpoint but not
+  // a tangent, so the join read as a sharp break in the middle of what should
+  // be a single cable. Both parts are now control points on one curve, so the
+  // cable flattens out as it reaches the plate instead of hinging there.
+  const pts = hang(
     new THREE.Vector3(leds[i].lx, PANEL_Y + 0.05, PANEL_Z + 0.28),
-    edge, 0.42, '#333842'
+    edge, 0.42, BENCH_TOP + 0.03
   );
-  // The short length across the plate to the foot of the pin. Straight and
-  // flat, because it is lying on a surface.
-  const run = wire(
-    edge, new THREE.Vector3(pinPos.x, plateTop.y, pinPos.z), 0, '#333842'
+  // Carry on across the plate. A point just inside the edge keeps the curve
+  // flat once it has landed rather than letting it arc up to the pin.
+  const inset = edge.clone().lerp(
+    new THREE.Vector3(pinPos.x, plateTop.y, pinPos.z), 0.45
   );
-  chamberWires.push([span, run]);
+  pts.push(inset, new THREE.Vector3(pinPos.x, plateTop.y, pinPos.z));
+  chamberWires.push([wire(pts, '#333842')]);
 }
 
 // Panel handles, looked up once.// Panel handles, looked up once. Missing nodes leave UI.rf undefined and the
