@@ -520,6 +520,45 @@ function makeChamber(x, isOperator) {
   // it grew to radius 1.04 against a plate only 0.81 across, so it overhung
   // the plate by up to 0.23 and swept through the wires as it scaled.
 
+  // A voltage readout behind each specimen.
+  //
+  // The number the whole piece turns on was only ever visible in the HTML
+  // panel, so the 3D view could not say what any chamber was receiving. This
+  // puts it at the specimen, where the eye already is.
+  //
+  // Drawn to a canvas texture rather than built from geometry: digits as
+  // meshes would be dozens of extra draw calls per chamber and would need a
+  // font loaded, while a 256x128 canvas costs one texture and can be repainted
+  // only when the displayed value actually changes.
+  //
+  // Placed at z=+1.05, behind the 1.62 base plate and still on the 2.6-deep
+  // bench, and tilted back slightly so it faces a camera that sits above eye
+  // level rather than staring at the ceiling.
+  const vCanvas = document.createElement('canvas');
+  vCanvas.width = 256; vCanvas.height = 128;
+  const vCtx = vCanvas.getContext('2d');
+  const vTex = new THREE.CanvasTexture(vCanvas);
+  vTex.minFilter = THREE.LinearFilter;
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.62, 0.31),
+    new THREE.MeshBasicMaterial({ map: vTex, toneMapped: false })
+  );
+  screen.position.set(0, -0.30, 1.05);
+  screen.rotation.x = -0.22;
+  g.add(screen);
+
+  // A bezel, so the screen reads as a panel meter and not a floating decal.
+  const bezel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.70, 0.39, 0.05),
+    new THREE.MeshStandardMaterial({
+      color: '#15181d', roughness: 0.55, metalness: 0.6,
+    })
+  );
+  bezel.position.set(0, -0.30, 1.02);
+  bezel.rotation.x = -0.22;
+  bezel.castShadow = true; bezel.receiveShadow = true;
+  g.add(bezel);
+
   // A base plate under each cage: the cage is mounted equipment, not a
   // floating box.
   const base = new THREE.Mesh(
@@ -541,7 +580,8 @@ function makeChamber(x, isOperator) {
   g.position.y = BENCH_TOP + 0.79;
   scene.add(g);
   return { group: g, core, glass, lamp, edges, isOperator,
-           pinHot, pinShaft, pinHead, base };
+           pinHot, pinShaft, pinHead, base,
+           vCtx, vTex, screen, _vShown: -1 };
 }
 
 for (let i = 0; i < CH; i++) {
@@ -1132,6 +1172,58 @@ function drawBrains(f) {
   }
 }
 
+// Peak amplitude at the electrode. The level is a fraction of this, so the
+// screens read in the simulation's own unit rather than in a percentage.
+// 8 mV is near the TOP of the useful range: measured, above 40 mV the response
+// saturates and a chamber at 25% becomes indistinguishable from one at 100%.
+const ELECTRODE_MV = 8.0;
+
+function drawVolts(c, mv, level, held) {
+  const x = c.vCtx;
+  x.fillStyle = '#07090c';
+  x.fillRect(0, 0, 256, 128);
+
+  // Hot chambers read hot. The digits carry the same colour language as the
+  // pins, so a glance across the row sorts the five without reading a number.
+  const col = level > 0.75 ? '#ff6a3a'
+            : level > 0.45 ? '#ffb02e'
+            : '#7fd4a8';
+
+  x.font = 'bold 62px ui-monospace, Consolas, monospace';
+  x.textAlign = 'right';
+  x.textBaseline = 'alphabetic';
+  x.fillStyle = col;
+  x.shadowColor = col;
+  x.shadowBlur = 18;
+  x.fillText(mv.toFixed(1), 186, 84);
+  x.shadowBlur = 0;
+
+  x.font = '26px ui-monospace, Consolas, monospace';
+  x.textAlign = 'left';
+  x.fillStyle = '#6a7078';
+  x.fillText('mV', 196, 84);
+
+  // A bar under the number, because a digit alone is hard to compare across
+  // five screens at a glance.
+  x.fillStyle = '#1b2026';
+  x.fillRect(22, 100, 212, 10);
+  x.fillStyle = col;
+  x.fillRect(22, 100, Math.max(2, 212 * level), 10);
+
+  // A lit marker while this chamber's button is held, so the screen says
+  // whether current is arriving now and not only how much.
+  x.fillStyle = held ? '#ff3b10' : '#232a31';
+  x.beginPath();
+  x.arc(34, 30, 9, 0, Math.PI * 2);
+  x.fill();
+  x.font = '20px ui-monospace, Consolas, monospace';
+  x.textAlign = 'left';
+  x.fillStyle = held ? '#ff8a66' : '#3c444c';
+  x.fillText(held ? 'STIM' : 'IDLE', 52, 38);
+
+  c.vTex.needsUpdate = true;
+}
+
 // ------------------------------------------------------------- playback
 // Heat ramp. The first version lerped one cold colour to one hot one, which
 // put deep red at 15% and orange at 100%: the coldest chambers looked the most
@@ -1281,6 +1373,20 @@ function apply(f) {
   // changing its mind faster than the eye can follow, which is the thing
   // worth seeing. An LED is on or it is off.
   const heldMask = DATA.held ? DATA.held[f] : 0;
+
+  // Repaint each voltage readout, but only when the displayed value changes.
+  //
+  // At 30fps across five chambers this would otherwise be 150 canvas repaints
+  // and 150 texture uploads per second for a number that changes far less
+  // often. Quantising to the displayed precision first means a repaint happens
+  // only when the digits would actually differ.
+  for (let i = 0; i < CH; i++) {
+    const c = chambers[i];
+    const key = Math.round(heat[i] * ELECTRODE_MV * 10) * 2 + ((heldMask >> i) & 1);
+    if (key === c._vShown) continue;
+    c._vShown = key;
+    drawVolts(c, heat[i] * ELECTRODE_MV, heat[i], (heldMask >> i) & 1);
+  }
   for (let i = 0; i < CH; i++) {
     const down = (heldMask >> i) & 1;
     const L = leds[i];
