@@ -506,6 +506,22 @@ const PANEL_Z = -1.8;
 const PANEL_Y = BENCH_TOP + 0.08;
 const leds = [];
 
+// A bench for the console, because it was standing on nothing.
+//
+// The main bench spans z -1.30 to 1.30 and the operator's spans -4.90 to
+// -2.30, so a panel at z=-1.8 sits in the gap between them, half a unit above
+// bare floor. It is the same slab as the other two, at the same height, so
+// the three read as one run of equipment rather than three separate props.
+const panelBench = new THREE.Mesh(
+  new THREE.BoxGeometry(3.0, BENCH_H, 1.5),
+  new THREE.MeshStandardMaterial({
+    color: '#232830', roughness: 0.55, metalness: 0.35,
+  })
+);
+panelBench.position.set(0, BENCH_TOP - BENCH_H / 2, PANEL_Z);
+panelBench.castShadow = true; panelBench.receiveShadow = true;
+scene.add(panelBench);
+
 const panelGroup = new THREE.Group();
 panelGroup.position.set(0, PANEL_Y, PANEL_Z);
 scene.add(panelGroup);
