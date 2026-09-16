@@ -91,13 +91,6 @@
 
 <div id="brains"></div>
 
-<div class="panel" id="footer">
-  Six instances of one connectome. Five mounted on pins, one outside at five
-  buttons.<br>
-  It is paid when one reaches full and burned for the ones it lets go cold.<br>
-  <b>Nothing in the simulation experiences anything.</b>
-</div>
-
 <div class="panel" id="hint">drag to orbit &middot; scroll to zoom &middot; <b>F</b> take &middot; <b>C</b> camera &middot; <b>R</b> record &middot; <b>S</b> sound</div>
 <div class="panel" id="rec" style="top:0;left:50%;transform:translateX(-50%);display:none;color:#ff5a45">
   <span style="font-size:11px">&#9679; RECORDING <span id="recT">0.0</span>s &middot; press R to stop</span>
@@ -556,9 +549,22 @@ function makeChamber(x, isOperator) {
   // from the front the fly occluded the digits. Lifting it clear puts the
   // number above the specimen, which is also how a rack-mounted meter would
   // actually sit: the equipment reads out above the thing it is wired to.
-  screen.position.set(0, 0.42, 1.05);
-  screen.rotation.y = Math.PI;
-  screen.rotation.x = 0.16;
+  if (isOperator) {
+    // The operator's reads FLAT, face up on the bench.
+    //
+    // It is not a specimen being measured from across the room, it is the one
+    // at the console, so its readout lies in front of it like an instrument on
+    // a desk rather than standing up on a post. Laid down it also stops
+    // blocking the row of five behind it, which a raised panel at this
+    // position would do from every useful angle.
+    screen.position.set(0, -0.735, -0.62);
+    screen.rotation.x = -Math.PI / 2;
+    screen.rotation.z = Math.PI;
+  } else {
+    screen.position.set(0, 0.42, 1.05);
+    screen.rotation.y = Math.PI;
+    screen.rotation.x = 0.16;
+  }
   g.add(screen);
 
   // A bezel, so the screen reads as a panel meter and not a floating decal.
@@ -570,8 +576,13 @@ function makeChamber(x, isOperator) {
   );
   // Behind the screen from the new viewing side, so the bezel frames it
   // instead of hiding it.
-  bezel.position.set(0, 0.42, 1.08);
-  bezel.rotation.x = 0.16;
+  if (isOperator) {
+    bezel.position.set(0, -0.755, -0.62);
+    bezel.rotation.x = -Math.PI / 2;
+  } else {
+    bezel.position.set(0, 0.42, 1.08);
+    bezel.rotation.x = 0.16;
+  }
   bezel.castShadow = true; bezel.receiveShadow = true;
   g.add(bezel);
 
@@ -581,15 +592,17 @@ function makeChamber(x, isOperator) {
   // (0.27), so 1.015 tall centred at -0.238. Sized from those two numbers
   // rather than guessed: a 1.0 post centred at -0.09 left a 0.15 gap above
   // the plate and the stand floated.
-  const stalk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.022, 0.028, 1.015, 10),
-    new THREE.MeshStandardMaterial({
-      color: '#20242b', roughness: 0.5, metalness: 0.7,
-    })
-  );
-  stalk.position.set(0, -0.238, 1.09);
-  stalk.castShadow = true;
-  g.add(stalk);
+  if (!isOperator) {
+    const stalk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.022, 0.028, 1.015, 10),
+      new THREE.MeshStandardMaterial({
+        color: '#20242b', roughness: 0.5, metalness: 0.7,
+      })
+    );
+    stalk.position.set(0, -0.238, 1.09);
+    stalk.castShadow = true;
+    g.add(stalk);
+  }
 
   // A base plate under each cage: the cage is mounted equipment, not a
   // floating box.
@@ -887,72 +900,92 @@ for (let i = 0; i < CH; i++) {
 
 // ------------------------------------------------- the operator's own lamps
 //
-// Two LEDs beside the operator, green for reward and red for punishment, so
-// its state is readable in the 3D view without the side panel. The scene
-// should stand on its own in a clip, and until now the only thing saying what
-// the operator was feeling was HTML.
+// Two lamps, one either side of the operator, each with its name written on
+// the bench beneath it. The operator's state was only ever stated in HTML, so
+// the 3D view could not stand on its own in a clip.
 //
-// Placed in WORLD space on its own little unit, not parented to the operator.
-// The operator group is rotated by PI to face the chambers, so anything added
-// to it has its axes flipped and "right" would come out on the left.
+// The two sides are not the same mechanism, and the labels say so. Green is
+// DOPAMINE: reward is delivered into 340 real dopaminergic neurons, PAM 316,
+// PPL1 16 and PPL2 8, present and measured in the connectome. Red is HEAT:
+// punishment arrives through the operator's own TRN_VP thermoreceptors.
 //
-// Deliberately NOT mirroring the chamber console. These two are the operator's
-// own readout, not another five-way selector, so a separate smaller housing
-// keeps the two jobs visually distinct.
+// That asymmetry is deliberate and worth reading off the bench. The five are
+// stimulated electrically and the one at the console is burned, because they
+// are different acts.
+//
+// Placed in WORLD space, not parented to the operator, whose group is rotated
+// by PI to face the chambers: anything added to it has its axes flipped and
+// the two sides would swap.
 const statusLeds = [];
-{
+function groundLabel(text, colour, x, z) {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 64;
+  const g2 = cv.getContext('2d');
+  g2.fillStyle = 'rgba(0,0,0,0)';
+  g2.fillRect(0, 0, 256, 64);
+  g2.font = 'bold 34px ui-monospace, Consolas, monospace';
+  g2.textAlign = 'center';
+  g2.textBaseline = 'middle';
+  g2.fillStyle = colour;
+  g2.shadowColor = colour;
+  g2.shadowBlur = 12;
+  g2.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.minFilter = THREE.LinearFilter;
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.66, 0.165),
+    new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, toneMapped: false, depthWrite: false,
+    })
+  );
+  // Flat on the bench, reading toward the front of the scene.
+  m.rotation.x = -Math.PI / 2;
+  m.rotation.z = Math.PI;
+  m.position.set(x, BENCH_TOP + 0.004, z);
+  scene.add(m);
+  return m;
+}
+
+for (const spec of [
+  { x: -0.95, colour: '#3fe07a', key: 'reward', label: 'DOPAMINE' },
+  { x:  0.95, colour: '#ff4a22', key: 'punish', label: 'HEAT' },
+]) {
   const unit = new THREE.Group();
-  // +x is the camera's right. 0.85 clears the fly's ~1.25 body and still sits
-  // well inside the 2.6 bench.
-  unit.position.set(0.85, BENCH_TOP, -3.6);
+  unit.position.set(spec.x, BENCH_TOP, -3.6);
   scene.add(unit);
 
   const housing = new THREE.Mesh(
-    new THREE.BoxGeometry(0.26, 0.14, 0.62),
+    new THREE.CylinderGeometry(0.11, 0.13, 0.08, 18),
     new THREE.MeshStandardMaterial({
       color: '#1d2027', roughness: 0.5, metalness: 0.7,
     })
   );
-  housing.position.y = 0.07;
+  housing.position.y = 0.04;
   housing.castShadow = true; housing.receiveShadow = true;
   unit.add(housing);
 
-  // Parallel to the fly, so the pair runs along the body rather than across
-  // it: reward forward, punishment back.
-  for (const spec of [
-    { z: -0.15, colour: '#3fe07a', key: 'reward' },
-    { z:  0.15, colour: '#ff4a22', key: 'punish' },
-  ]) {
-    const socket = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.062, 0.062, 0.03, 16),
-      new THREE.MeshStandardMaterial({
-        color: '#0d0f13', roughness: 0.8, metalness: 0.3,
-      })
-    );
-    socket.position.set(0, 0.145, spec.z);
-    socket.receiveShadow = true;
-    unit.add(socket);
+  const led = new THREE.Mesh(
+    new THREE.SphereGeometry(0.072, 18, 14),
+    new THREE.MeshStandardMaterial({
+      color: '#15161a', roughness: 0.25, metalness: 0.1,
+      emissive: new THREE.Color(spec.colour), emissiveIntensity: 0,
+    })
+  );
+  led.position.y = 0.115;
+  led.castShadow = true;
+  unit.add(led);
 
-    const led = new THREE.Mesh(
-      new THREE.SphereGeometry(0.048, 16, 12),
-      new THREE.MeshStandardMaterial({
-        color: '#15161a', roughness: 0.25, metalness: 0.1,
-        emissive: new THREE.Color(spec.colour), emissiveIntensity: 0,
-      })
-    );
-    led.position.set(0, 0.168, spec.z);
-    led.castShadow = true;
-    unit.add(led);
+  const glow = new THREE.PointLight(spec.colour, 0, 1.3, 2.2);
+  glow.position.y = 0.2;
+  unit.add(glow);
 
-    const glow = new THREE.PointLight(spec.colour, 0, 1.0, 2.2);
-    glow.position.set(0, 0.24, spec.z);
-    unit.add(glow);
+  // The name on the bench, just in front of its own lamp.
+  groundLabel(spec.label, spec.colour, spec.x, -3.6 + 0.42);
 
-    statusLeds.push({ led, glow, key: spec.key });
-  }
+  statusLeds.push({ led, glow, key: spec.key });
 }
 
-// Panel handles, looked up once.// Panel handles, looked up once. Missing nodes leave UI.rf undefined and the
+// Panel handles, looked up once.// Panel handles, looked up once.// Panel handles, looked up once. Missing nodes leave UI.rf undefined and the
 // frame loop skips the panel rather than throwing every frame.
 const UI = {
   rf: document.querySelector('#rf'), pf: document.querySelector('#pf'),
