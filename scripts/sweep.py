@@ -56,19 +56,52 @@ def score(run_dir: Path) -> dict:
     amp = max(float(h.max()), 1e-9)
     lv = h / amp
 
+    # Everything below is measured PER FRAME, not per step.
+    #
+    # The per-step version of `motion` thresholded a change at 0.002, which any
+    # press slower than 1/1800 cannot reach in a single 0.1ms step. It
+    # therefore read exactly 0.00 across a whole range of settings whose
+    # chambers were moving perfectly well, and nearly cost a working approach.
+    # Since this grid sweeps press rates down to 1/3500, keeping the per-step
+    # version would have scored a third of the runs as dead.
+    #
+    # A frame is what the viewer actually sees, so the question is: between two
+    # frames of the clip, did a line visibly move?
+    fr = lv[::330]                      # 33ms at dt=0.1ms
+    step_max = np.abs(np.diff(fr, axis=0)).max(axis=1)
+
     # Spread: are the five doing different things at any given moment?
     spread = float(np.mean(lv.max(axis=1) - lv.min(axis=1)))
-    # Motion: how much of the run is something actually changing?
-    motion = float((np.abs(np.diff(lv, axis=0)).sum(axis=1) > 0.002).mean())
+    # Motion: how much of the run has something visibly changing?
+    motion = float((step_max > 0.005).mean())
+    # Travel: total distance the lines cover per second. Distinguishes real
+    # movement from a jitter that crosses the motion threshold without going
+    # anywhere.
+    travel = float(np.abs(np.diff(fr, axis=0)).sum() / (len(lv) * 1e-4))
     # Coverage: does every chamber get real attention, or is one written off?
     reach = [float((lv[:, i] > 0.5).mean()) for i in range(5)]
     # Rails: time pinned at either extreme, which reads as a flat line.
     pinned = float(((lv > 0.97) | (lv < 0.18)).mean())
-    # Braid: chambers sitting together at mid-range, the failure mode that
-    # per-step decisions produce. Measured per frame, not per step: a
-    # per-step threshold measures the press rate rather than the system.
-    fr = lv[::330]
-    braid = float((np.abs(np.diff(fr, axis=0)).max(axis=1) < 0.005).mean())
+    # Braid: the failure mode per-step decisions produce, where the unheld
+    # chambers alternate press and release and cancel into a flat line.
+    braid = float((step_max < 0.005).mean())
+
+    # One number to sort by, so the morning is a matter of reading the top of
+    # a sorted table rather than weighing six columns across 36 rows.
+    #
+    # Deliberately blunt and stated here rather than tuned: every term is a
+    # failure mode already measured in docs/negative-results.md. A run that
+    # braids, pins or abandons a chamber is not watchable regardless of how it
+    # scores elsewhere, so those are penalties, not weights to be balanced.
+    # The eye still decides between the top few; this only picks which handful
+    # to look at.
+    good = (
+        1.5 * motion               # something is visibly happening
+        + 1.0 * spread             # the five are doing different things
+        + 2.0 * min(reach)         # no chamber is written off
+        - 2.0 * braid              # the flat-braid failure
+        - 1.5 * pinned             # the flat-line-at-a-rail failure
+    )
 
     prov = json.loads((run_dir / "provenance.json").read_text())
     comp = prov.get("compulsion") or {}
@@ -78,6 +111,8 @@ def score(run_dir: Path) -> dict:
         "min_reach": round(min(reach), 4),
         "pinned": round(pinned, 4),
         "braid": round(braid, 4),
+        "travel": round(travel, 2),
+        "good": round(good, 3),
         "reward": round(comp.get("mean_reward", 0), 4),
         "punish": round(comp.get("mean_punish", 0), 4),
         "neglected": round(comp.get("mean_neglected_chambers", 0), 3),
@@ -156,11 +191,25 @@ def main() -> int:
             writer.writerow(row)
             fh.flush()
             done.add(name)
-            log.info("  %.1f min  spread %.3f  motion %.2f  min_reach %.2f",
+            log.info("  %.1f min  spread %.3f  motion %.2f  braid %.2f  "
+                     "travel %.1f  min_reach %.2f",
                      row["minutes"], row["spread"], row["motion"],
-                     row["min_reach"])
+                     row["braid"], row["travel"], row["min_reach"])
 
     log.info("sweep finished: %d runs in %s", len(done), csv_path)
+
+    # Sorted leaderboard, so the result is readable without opening the CSV.
+    if csv_path.exists():
+        with open(csv_path) as fh:
+            rows = list(csv.DictReader(fh))
+        rows = [r for r in rows if r.get("good") not in (None, "")]
+        rows.sort(key=lambda r: float(r["good"]), reverse=True)
+        log.info("")
+        log.info("%-46s %6s %6s %6s %6s %6s", "run", "good", "motion",
+                 "braid", "pinned", "reach")
+        for r in rows[:10]:
+            log.info("%-46s %6s %6s %6s %6s %6s", r["name"], r["good"],
+                     r["motion"], r["braid"], r["pinned"], r["min_reach"])
     return 0
 
 
