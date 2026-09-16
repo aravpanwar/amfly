@@ -226,3 +226,31 @@ def verify_counts(c: Connectome) -> None:
     assert (
         n_dn == MEASURED.descending_neurons
     ), f"DNs {n_dn} != {MEASURED.descending_neurons}"
+
+
+def soma_positions(body_ids, path="data/soma.npz"):
+    """(N, 3) soma coordinates aligned to `body_ids`, NaN where unknown.
+
+    Fetched from the public neuPrint API, no auth needed, and cached. Covers
+    141,781 of the 166,700 neurons: the remainder have no soma position
+    recorded, and that gap is declared rather than filled in.
+
+    The cached body_ids are NOT sorted, so they must be argsorted before any
+    searchsorted against them. Matching without that step returns one hit in
+    166,700 while looking like it worked.
+    """
+    import numpy as np
+    from pathlib import Path
+
+    z = np.load(Path(path))
+    ids, xyz = z["body_ids"], z["xyz"]
+    order = np.argsort(ids)
+    ids_sorted = ids[order]
+
+    body_ids = np.asarray(body_ids)
+    out = np.full((len(body_ids), 3), np.nan, dtype=np.float32)
+    pos = np.searchsorted(ids_sorted, body_ids)
+    pos = np.clip(pos, 0, len(ids_sorted) - 1)
+    hit = ids_sorted[pos] == body_ids
+    out[hit] = xyz[order[pos[hit]]]
+    return out

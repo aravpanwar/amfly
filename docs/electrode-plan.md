@@ -97,3 +97,41 @@ indistinguishable from one at 100%.
 Continuous level, or discrete pulses? Pulses would look better in a clip and
 match how stimulation is really delivered, but they change the mechanism
 rather than the label, so the parameter sweep would need rerunning.
+
+## Measured, after building it
+
+**The electrode works and is isolated.** At the `DNp01`-left site with radius
+6000 it reaches 5,579 neurons above 1% weight. Stimulating chamber 0 alone
+gives 45 `DNp01` spikes in chamber 0 and **0 in chamber 4**, so every spike is
+caused by the electrode and isolation is intact.
+
+**Unilateral, as predicted.** `DNp01`-left sits at weight 1.000 and
+`DNp01`-right at 0.0000. One electrode reaches one side, and the piece says so.
+
+**Pulse rate scales with level.** Over 400ms at levels 1.0, 0.5 and 0.1, the
+chambers spent 80, 12 and 8 steps mid-pulse. Amplitude per pulse is fixed and
+the level sets frequency, which is how a stimulator is actually used.
+
+### A correction to this plan
+
+This document claimed the electrode would drive the escape pathway where
+warmth could not. **Measured, that is not true.** Against the old thermo
+channel under identical conditions:
+
+| channel | DNp01 spikes | all spikes | DNp01 share |
+|---|---|---|---|
+| electrode | 45 | 1,026,707 | 0.0044% |
+| thermo | 42 | 947,073 | 0.0044% |
+
+Identical share. Warmth already rang the alarm bell at a low rate, and the
+electrode rings it at the same low rate, so `docs/what-heat-is.md` is wrong to
+say the thermoreceptors never drive DNp01.
+
+**So the electrode is not justified by making the fly convulse.** It is
+justified by having a physical position, by stimulating a local population
+rather than a labelled line, and by matching what the simulation literally
+does. Those are real and they stand on their own.
+
+Visible convulsion, if it is wanted, still needs `DNp01` driven directly and
+hard, declared as an authored intervention. That is a separate change and must
+not be presented as something the electrode produces on its own.
