@@ -33,9 +33,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 log = logging.getLogger("amfly.sweep")
 
-# The grid. Kept small deliberately: a 3s run is about 10 minutes, so seven
-# hours is roughly 40 runs. Better to explore a few axes properly than to
-# sample a large space once each.
+# The grid. Kept small deliberately: a 3s run is about 14 minutes measured on
+# this machine, so 36 combinations is roughly 8.4 hours. Better to explore a
+# few axes properly than to sample a large space once each. Runs are ordered
+# outward from the best known configuration, so stopping early still leaves
+# the useful part explored.
 # switch-margin is first because it is the parameter that decides whether the
 # piece reads at all. Below about 0.2 the three unheld chambers braid together
 # at mid-range and only two of five move; see docs/negative-results.md. The
@@ -138,10 +140,26 @@ def main() -> int:
     csv_path = args.out / "sweep.csv"
     combos = list(itertools.product(*GRID.values()))
     keys = list(GRID.keys())
-    # Interleave so an interrupted sweep still spans the whole grid rather
-    # than finishing one corner of it. The laptop has been closed mid-run
-    # before and will be again.
-    combos.sort(key=lambda c: (sum(GRID[k].index(v) for k, v in zip(keys, c)), c))
+    # Order by distance from the best known configuration, nearest first.
+    #
+    # Two things matter and a plain product ordering gets both wrong. The
+    # laptop has been closed mid-sweep before and will be again, so whatever
+    # runs first has to be worth having. And the grid deliberately includes
+    # switch-margin 0.25, which is already measured as producing the braid;
+    # starting there would spend the first hours confirming a known negative.
+    #
+    # Starting at the replay-chosen centre and walking outward means an
+    # interrupted sweep has explored the neighbourhood of the best guess,
+    # which is the part most likely to contain the run that ships.
+    centre = {"switch-margin": 0.40, "press-rate": 2000.0,
+              "grip": 2, "debt-bias": 1.1}
+    def distance(combo):
+        return sum(
+            abs(GRID[k].index(v) - GRID[k].index(centre[k]))
+            for k, v in zip(keys, combo)
+            if k in centre
+        )
+    combos.sort(key=lambda c: (distance(c), c))
 
     log.info("%d combinations, budget %.1f h", len(combos), args.hours)
     deadline = time.time() + args.hours * 3600
