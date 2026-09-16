@@ -1567,6 +1567,21 @@ function apply(f) {
   const heat = DATA.heat[f];
   const rates = DATA.rates[f];
 
+  // The jolt envelope per chamber, computed once and shared.
+  //
+  // The LEDs and the wires need the same beat as the bodies, and they are
+  // updated in a different loop, so this cannot live inside either one. A
+  // chamber's light flashing out of step with its own fly reads as two
+  // unrelated events rather than one arrival of current.
+  const zapOf = [];
+  for (let i = 0; i < CH; i++) {
+    const hz = 1.6 + heat[i] * 11.0;
+    const ph = (time * hz + i * 0.37) % 1;
+    const env = ph < 0.08 ? ph / 0.08 : Math.exp(-(ph - 0.08) * 7.5);
+    zapOf.push(0.22 + env * 0.78);
+  }
+
+
   for (let i = 0; i < CH; i++) {
     const h = heat[i];
     const c = chambers[i];
@@ -1590,6 +1605,23 @@ function apply(f) {
     // real signal: heat moves motor-neuron firing by about 3% (measured), and
     // that is stated in the README rather than passed off as raw output.
     const tw = h * h;
+
+    // ZAP, not writhe.
+    //
+    // The motion was a continuous waveform scaled by level, which reads as
+    // ongoing distress rather than as discrete shocks: nothing ever arrived,
+    // it was simply always happening.
+    //
+    // The simulation does pulse. At full level the electrode fires every 20ms
+    // and at half level roughly every 110ms, so individual 0.4ms discharges
+    // are far too brief to separate at 30fps. What CAN read is the arrival of
+    // current: an envelope with a hard attack and a fast decay, firing at the
+    // rate the chamber is actually being driven.
+    //
+    // Each jolt therefore snaps the body and lets it fall back before the next
+    // one, so a hot chamber is hit constantly and a cool one twitches, settles,
+    // and waits.
+    const zap = zapOf[i];
     // CONVULSION, not writhing.
     //
     // A smooth sine reads as an animal moving itself. Current forced through
@@ -1613,10 +1645,10 @@ function apply(f) {
       // no longer a floor under them.
       const own = Math.sin(time * (7 + tw * 19) + k * 2.3);
       L.mesh.rotation.z = L.base.z + L.sx * 0.06
-        + (seize * 0.62 + own * 0.38) * (0.02 + tw * 1.55);
+        + (seize * 0.62 + own * 0.38) * (0.02 + tw * 1.55) * zap;
       L.mesh.rotation.x = L.base.x
         + (seize * 0.5 + Math.cos(time * (6 + tw * 15) + k) * 0.5)
-          * (0.015 + tw * 0.85);
+          * (0.015 + tw * 0.85) * zap;
     }
     // The whole body jerks against the pin, not just the limbs. A fly that
     // convulses only from the knees down reads as a puppet.
@@ -1636,12 +1668,12 @@ function apply(f) {
     // it can only fight what is holding it, and past about 0.3 rad the
     // rotation starts to read as the fly working loose, which would undo the
     // mount. 0.26 is close to that line without crossing it.
-    c.core.rotation.z = seize * tw * 0.26;
-    c.core.rotation.x = Math.sin(time * 27 + 0.9) * tw * 0.17;
+    c.core.rotation.z = seize * tw * 0.26 * zap;
+    c.core.rotation.x = Math.sin(time * 27 + 0.9) * tw * 0.17 * zap;
     // A small lift as well, so the convulsion is not purely rotational. The
     // body strains UP the pin and settles back rather than only twisting.
     c.core.position.y = c.core.userData.baseY
-      + Math.abs(seize) * tw * 0.055;
+      + Math.abs(seize) * tw * 0.055 * zap;
     // Beat about Z, the hinge. wing_left/right are parent transforms whose own
     // rotation already places the wing along the body; writing rotation.x
     // every frame overwrote that placement and folded them flat into the
@@ -1657,7 +1689,7 @@ function apply(f) {
       // as flight, which is the one thing a pinned fly being shocked is not
       // doing; sharing the jolt term makes them part of the convulsion.
       const beat = (Math.sin(time * (7 + tw * 40)) * 0.45 + seize * 0.55)
-        * (0.03 + tw * 1.75);
+        * (0.03 + tw * 1.75) * zap;
       w.pivot.rotation.set(w.base.x, w.base.y, w.base.z + beat);
     }
     // Firing rate makes the core breathe, so a chamber is never quite still.
@@ -1677,7 +1709,11 @@ function apply(f) {
     // the top. Intensity alone would make a cold pin merely dim, which is
     // hard to read against a dark cage; a colour change is legible at a
     // glance even when the pin is small on screen.
-    c.pinHot.material.emissiveIntensity = 0.35 + Math.pow(h, 0.65) * 6.5;
+    // The pin flashes on the same beat as the body jerks, so the light and
+    // the motion are one event. A steady glow with a twitching fly beside it
+    // reads as two unrelated things happening at once.
+    c.pinHot.material.emissiveIntensity =
+      (0.35 + Math.pow(h, 0.65) * 6.5) * (0.45 + zap * 0.85);
     c.pinHot.material.emissive.setRGB(
       0.55 + h * 0.45,
       0.05 + h * h * 0.62,
@@ -1723,8 +1759,8 @@ function apply(f) {
     if (down) {
       // Lit, and brighter for the heat it is currently causing.
       L.led.material.emissive.setRGB(1.0, 0.24 + h * 0.4, 0.06);
-      L.led.material.emissiveIntensity = 1.6 + h * 3.2;
-      L.glow.intensity = 0.5 + h * 1.5;
+      L.led.material.emissiveIntensity = (1.6 + h * 3.2) * (0.5 + zapOf[i] * 0.8);
+      L.glow.intensity = (0.5 + h * 1.5) * (0.5 + zapOf[i] * 0.8);
     } else {
       // Dark, and this is the half that matters.
       //
@@ -1751,7 +1787,8 @@ function apply(f) {
       if (down) {
         const pulse = 0.5 + 0.5 * Math.sin(time * 9 - i * 0.7);
         w.material.emissive.setRGB(1.0, 0.26, 0.07);
-        w.material.emissiveIntensity = 0.30 + pulse * 0.42 + h * 0.5;
+        w.material.emissiveIntensity =
+          (0.30 + pulse * 0.42 + h * 0.5) * (0.5 + zapOf[i] * 0.8);
       } else {
         const neglect = Math.max(0, 1 - h);
         w.material.emissive.setRGB(0.06, 0.04, 0.16);
