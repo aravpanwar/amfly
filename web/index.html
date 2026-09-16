@@ -1118,16 +1118,43 @@ function apply(f) {
     // real signal: heat moves motor-neuron firing by about 3% (measured), and
     // that is stated in the README rather than passed off as raw output.
     const tw = h * h;
+    // CONVULSION, not writhing.
+    //
+    // A smooth sine reads as an animal moving itself. Current forced through
+    // motor neurons does not look like that: it is sharp, it does not ease,
+    // and every limb is driven by the same discharge rather than by the
+    // animal's own coordination.
+    //
+    // Three things make the difference. The waveform is folded so it snaps
+    // rather than swings; several frequencies beat against each other so the
+    // rhythm never resolves; and the limbs share a common term, because they
+    // are being driven by one current and not by six independent decisions.
+    //
+    // This is an authored visual on an authored intervention, and the README
+    // says so: the bodies move because current is injected into 708 motor
+    // neurons directly, which is not an escape reflex.
+    const jolt = Math.sin(time * (34 + tw * 52)) * Math.sin(time * 11.3 + 1.7);
+    const seize = Math.pow(Math.abs(jolt), 0.45) * Math.sign(jolt);
     for (let k = 0; k < c.core.userData.legs.length; k++) {
       const L = c.core.userData.legs[k];
       // The constant term is the hang: the legs are unloaded, because there is
-      // no longer a floor under them. Everything added to it is the struggle,
-      // which now reads as a pinned insect working against the pin rather than
-      // an animal shifting its footing.
+      // no longer a floor under them.
+      const own = Math.sin(time * (7 + tw * 19) + k * 2.3);
       L.mesh.rotation.z = L.base.z + L.sx * 0.06
-        + Math.sin(time * (5 + tw * 13) + k * 1.7) * (0.01 + tw * 0.22);
-      L.mesh.rotation.x = L.base.x + Math.cos(time * (4 + tw * 9) + k) * (0.008 + tw * 0.12);
+        + (seize * 0.62 + own * 0.38) * (0.012 + tw * 0.40);
+      L.mesh.rotation.x = L.base.x
+        + (seize * 0.5 + Math.cos(time * (6 + tw * 15) + k) * 0.5)
+          * (0.008 + tw * 0.2);
     }
+    // The whole body jerks against the pin, not just the limbs. A fly that
+    // convulses only from the knees down reads as a puppet.
+    //
+    // Kept small on purpose. The pin runs through the thorax, so the body
+    // cannot go anywhere: it can only strain against the thing holding it.
+    // A large rotation would read as the fly coming loose and would undo what
+    // the mount establishes.
+    c.core.rotation.z = seize * tw * 0.075;
+    c.core.rotation.x = Math.sin(time * 27 + 0.9) * tw * 0.045;
     // Beat about Z, the hinge. wing_left/right are parent transforms whose own
     // rotation already places the wing along the body; writing rotation.x
     // every frame overwrote that placement and folded them flat into the
@@ -1139,7 +1166,11 @@ function apply(f) {
     // side and doubled on the other: one wing rose while the other fell, and
     // they held a straight line through the body.
     for (const w of c.core.userData.wings) {
-      const beat = Math.sin(time * (7 + tw * 34)) * (0.02 + tw * 0.38);
+      // The wings seize on the same current as the legs. A smooth beat reads
+      // as flight, which is the one thing a pinned fly being shocked is not
+      // doing; sharing the jolt term makes them part of the convulsion.
+      const beat = (Math.sin(time * (7 + tw * 40)) * 0.45 + seize * 0.55)
+        * (0.02 + tw * 0.44);
       w.pivot.rotation.set(w.base.x, w.base.y, w.base.z + beat);
     }
     // Firing rate makes the core breathe, so a chamber is never quite still.
