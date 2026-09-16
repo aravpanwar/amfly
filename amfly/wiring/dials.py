@@ -94,8 +94,8 @@ class Dials:
     # a chamber high is possible but only by staying on it.
     # Slower than the 1/260 and 1/900 used before, so the rise and fall are
     # themselves visible rather than instantaneous jumps between rails.
-    press_rate: float = 1.0 / 900.0
-    release_rate: float = 1.0 / 2200.0
+    press_rate: float = 1.0 / 2000.0
+    release_rate: float = 1.0 / 5000.0
 
     history: list = field(default_factory=list, init=False)
 
@@ -188,32 +188,30 @@ class Dials:
         """(n_blocks,) heat level per chamber, each in 0..1."""
         return self._levels.copy()
 
-    # Minimum steps between re-deciding which buttons are held.
+    # How far a challenger must beat a held button before it takes the slot.
     #
-    # Without this the operator re-chose every step, 1720 changes per second,
-    # while a press needs 26ms to raise a chamber. No press ever completed, so
-    # the chambers that were not dominant just vibrated around mid-range and
-    # the plot became a band of noise instead of legible strokes.
+    # This replaces a fixed decision cadence, which could not be made to work.
+    # Re-deciding on a timer means the operator's activity only ever chose
+    # WHICH chamber, never WHEN, so every cadence produced a regular pattern:
+    # at 100ms five interleaved ramps of near-identical period, at 300ms a
+    # clean rotation, with four of five chambers sitting within one percent of
+    # each other. That is a round robin wearing a fly costume.
     #
-    # This is not the old commitment, which held a slot until a chamber was
-    # maxed and locked the quietest block out entirely. It only sets how often
-    # the choice is revisited.
-    # 300 steps, 30ms, gave 83 button transitions per second: about 250
-    # strokes across a 3s plot, roughly 5px each and unreadable. A legible
-    # clip wants 5 to 10 per second. 3000 steps is 300ms per decision, and
-    # since a press lands in 26ms the chamber then simply sits held, which is
-    # what "the operator is holding this one" should look like.
-    # Measured across three runs, decisions per second and how it read:
-    #   every step   1720/s  vibration, no press ever completed
-    #   30ms           83/s  sawtooth, ~250 strokes at 5px each
-    #   300ms          13/s  a metronome: perfectly regular rotation, and
-    #                        motion fell to 26% with 67% spent at a rail
+    # Dropping the cadence entirely was worse. With the grip re-auctioned every
+    # step the three losing chambers alternate press and release and cancel
+    # out, so chambers 1, 2 and 3 collapsed into a flat braid at 50% for the
+    # whole run while only two chambers moved.
     #
-    # At 300ms the cadence sets the rhythm rather than the operator's own
-    # activity. 100ms is just longer than the ~90ms a press takes to land, so
-    # a choice can complete, while leaving the brain enough say to break the
-    # regularity.
-    decide_every: int = 1000
+    # A margin fixes both, because it makes switching depend on the size of the
+    # difference rather than on a clock. A held button keeps its slot through
+    # small fluctuations and yields to a decisive one. Measured across three
+    # independent source runs at 0.40: 75 to 95 swaps in 3s, every chamber
+    # using the full range, 17% pinned. The timing is irregular because the
+    # operator's own activity sets it.
+    #
+    # Lower values reintroduce the braid: at 0.10 chambers 1, 2 and 3 are a
+    # flat tangle at 50% again, because the margin is smaller than the noise.
+    switch_margin: float = 0.40
 
     def update(self, spikes: np.ndarray, step: int) -> np.ndarray:
         """One step of operator spikes in, five heat levels out.
@@ -297,11 +295,20 @@ class Dials:
             # copy of `applied`, which silently discarded the debt-aware choice
             # and made debt_bias do nothing at all.
             score = applied + self.debt_bias * self._debt_view
-            # Re-decide on a cadence, not every step.
-            if step % self.decide_every != 0:
-                score = None
-            if score is not None:
-                self._held = np.argsort(-score)[: self.grip]
+            # Swap at most one button per step, and only on a decisive margin.
+            #
+            # The weakest holder is compared against the strongest challenger.
+            # Nothing here reads a clock: how often the operator switches is
+            # set by how sharply its own blocks separate.
+            held = set(int(i) for i in self._held)
+            challengers = [i for i in range(self.n_blocks) if i not in held]
+            if challengers:
+                weakest = min(held, key=lambda i: score[i])
+                best = max(challengers, key=lambda i: score[i])
+                if score[best] > score[weakest] + self.switch_margin:
+                    held.discard(weakest)
+                    held.add(best)
+                    self._held = np.array(sorted(held))
 
         if applied is not None and self.buttons:
             # Pressed climbs, released falls.

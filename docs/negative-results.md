@@ -433,3 +433,36 @@ Options not yet tried:
 
 Option 2 is the most promising and the simplest: it was never tested, because
 the cadence was added and the press rate slowed in the same change.
+
+### Resolved: hysteresis, not a clock
+
+Option 2 was tested and **fails, in a new way**. With the grip re-auctioned
+every step the three losing chambers receive press and release in near-equal
+alternation and cancel out. Measured at four press rates from 1/1800 to
+1/12000, chambers 1, 2 and 3 collapsed into a flat braid at 50% for the entire
+run while only two chambers moved. Slowing the press did not help at any value,
+because the problem is not the press rate.
+
+The metric hid this at first. `motion` thresholded a per-step change at 0.002,
+and any press slower than 1/1800 moves less than that in one step, so it read
+exactly 0.00 for every slow setting while the chambers were moving fine. That
+is the second time a hard zero across wildly different settings turned out to
+be the instrument. Motion is now sampled at a 33ms frame interval, which asks
+the question that matters: between two frames of the clip, did a line visibly
+move?
+
+**What works is option 1: a margin.** A held button keeps its slot until a
+challenger beats it by `switch_margin`, so the decision depends on the size of
+the difference rather than on a clock, and the operator's own activity sets the
+rhythm. At 0.40, across three independent source runs:
+
+| source run | motion | pinned | travel/s | swaps in 3s |
+|---|---|---|---|---|
+| paced | 1.00 | 0.18 | 9.97 | 84 |
+| slow | 1.00 | 0.17 | 10.27 | 75 |
+| final | 1.00 | 0.17 | 9.58 | 95 |
+
+All five chambers use the full range, the strokes vary in height and spacing,
+and no chamber flatlines. The margin has to be large: at 0.10 the braid comes
+back, because the margin is then smaller than the fluctuation it is meant to
+ignore.
