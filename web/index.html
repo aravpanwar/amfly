@@ -443,6 +443,8 @@ function makeChamber(x, isOperator) {
     })
   );
   base.position.y = -0.79;
+  base.userData.halfWidth = 0.81;   // 1.62 square
+  base.userData.topLocal = -0.79 + 0.09 / 2;
   base.castShadow = true; base.receiveShadow = true;
   g.add(base);
 
@@ -453,7 +455,7 @@ function makeChamber(x, isOperator) {
   g.position.y = BENCH_TOP + 0.79;
   scene.add(g);
   return { group: g, core, glass, lamp, pad, edges, isOperator,
-           pinHot, pinShaft, pinHead };
+           pinHot, pinShaft, pinHead, base };
 }
 
 for (let i = 0; i < CH; i++) {
@@ -606,17 +608,45 @@ const headWire = wire(
 // be connected to.
 const chamberWires = [];
 for (let i = 0; i < CH; i++) {
-  const base = new THREE.Vector3();
-  chambers[i].pinShaft.getWorldPosition(base);
-  // getWorldPosition gives the shaft's centre; its base is half its length
-  // below that, which is the bench surface.
-  const end = new THREE.Vector3(base.x, BENCH_TOP + 0.05, base.z);
-  chamberWires.push(
-    wire(
-      new THREE.Vector3(leds[i].lx, PANEL_Y + 0.05, PANEL_Z + 0.28),
-      end, 0.42, '#333842'
-    )
+  const c = chambers[i];
+  const pinPos = new THREE.Vector3();
+  c.pinShaft.getWorldPosition(pinPos);
+
+  // Climb ONTO the base plate, do not cut through it.
+  //
+  // The plate is 1.62 square and 0.09 thick, so it occupies 0.81 in every
+  // direction around the pin. A cable run straight to the pin at bench height
+  // spends its last 0.81 units inside that slab, which is what showed as the
+  // wire phasing through the squares under each fly.
+  //
+  // The run is therefore in two parts: a hanging span from the panel to the
+  // near edge of the plate, then a short length lying on the plate's surface
+  // up to the pin, the way a cable actually reaches a piece of mounted
+  // equipment.
+  const plateTop = new THREE.Vector3();
+  c.base.getWorldPosition(plateTop);
+  plateTop.y += 0.09 / 2 + 0.018;          // just clear of the plate face
+  const half = c.base.userData.halfWidth;
+
+  // The edge the cable arrives at, on the side facing the panel.
+  const edge = new THREE.Vector3(
+    pinPos.x, plateTop.y, pinPos.z + (PANEL_Z < pinPos.z ? -half : half)
   );
+
+  // Both segments belong to chamber i, so they are kept together and lit as
+  // one cable. Pushing them flat would have made chamberWires ten long while
+  // the frame loop indexes it by chamber, leaving five segments permanently
+  // dark.
+  const span = wire(
+    new THREE.Vector3(leds[i].lx, PANEL_Y + 0.05, PANEL_Z + 0.28),
+    edge, 0.42, '#333842'
+  );
+  // The short length across the plate to the foot of the pin. Straight and
+  // flat, because it is lying on a surface.
+  const run = wire(
+    edge, new THREE.Vector3(pinPos.x, plateTop.y, pinPos.z), 0, '#333842'
+  );
+  chamberWires.push([span, run]);
 }
 
 // Panel handles, looked up once.// Panel handles, looked up once. Missing nodes leave UI.rf undefined and the
@@ -930,15 +960,16 @@ function apply(f) {
     // as a painted line, and a travelling pulse says the signal is going
     // somewhere. The pulse rate is authored and slow enough to read; the real
     // latency is 20ms, which is 0.6 of a frame and cannot be shown honestly.
-    const w = chamberWires[i];
-    if (down) {
-      const pulse = 0.5 + 0.5 * Math.sin(time * 9 - i * 0.7);
-      w.material.emissive.setRGB(1.0, 0.26, 0.07);
-      w.material.emissiveIntensity = 0.30 + pulse * 0.42 + h * 0.5;
-    } else {
-      const neglect = Math.max(0, 1 - h);
-      w.material.emissive.setRGB(0.06, 0.04, 0.16);
-      w.material.emissiveIntensity = neglect * 0.30;
+    for (const w of chamberWires[i]) {
+      if (down) {
+        const pulse = 0.5 + 0.5 * Math.sin(time * 9 - i * 0.7);
+        w.material.emissive.setRGB(1.0, 0.26, 0.07);
+        w.material.emissiveIntensity = 0.30 + pulse * 0.42 + h * 0.5;
+      } else {
+        const neglect = Math.max(0, 1 - h);
+        w.material.emissive.setRGB(0.06, 0.04, 0.16);
+        w.material.emissiveIntensity = neglect * 0.30;
+      }
     }
   }
 
