@@ -223,8 +223,24 @@ class Electrode:
         # the chamber index, not from an RNG: there is no randomness anywhere
         # in this pipeline and adding one here would undermine the claim that
         # divergence is driven by spikes alone.
+        #
+        # OFFSET BY ONE so no chamber has phase 0.
+        #
+        # With phase 0, chamber 0 received its first pulse at step 0, while the
+        # network was still in its pristine initial state and nothing else had
+        # perturbed it. Every other chamber's first pulse landed 4 ms or more
+        # later, on a network the phasic drive had already stirred, and
+        # produced less separation as a result. Measured on a 3 s run: chamber
+        # 0 showed 628 differing neurons at step 2 while all four others showed
+        # exactly 0, and it never lost that head start, finishing at 78.7M
+        # cumulative distance against roughly 53.5M for the rest.
+        #
+        # That is the apparatus deciding, not the operator, and it is the same
+        # class of bug as the DN block imbalance: an artefact of indexing that
+        # makes one chamber permanently special.
         self._phase = np.array(
-            [int(c * self.min_period / max(len(CHAMBERS), 1)) for c in CHAMBERS],
+            [int((c + 1) * self.min_period / (len(CHAMBERS) + 1))
+             for c in CHAMBERS],
             dtype=np.int64,
         )
         self._firing = np.zeros(len(CHAMBERS), dtype=np.int64)

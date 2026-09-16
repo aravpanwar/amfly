@@ -466,3 +466,34 @@ All five chambers use the full range, the strokes vary in height and spacing,
 and no chamber flatlines. The margin has to be large: at 0.10 the braid comes
 back, because the margin is then smaller than the fluctuation it is meant to
 ignore.
+
+## 2026-09-16: phase 0 made chamber 0 permanently special
+
+The electrode pulses each chamber on its own phase so the five do not fire in
+lockstep. Phases were seeded as `c * min_period / 5`, which gives chamber 0 a
+phase of exactly **0**.
+
+That meant chamber 0 received its first pulse at step 0, while the network was
+still in its pristine initial state and nothing had perturbed it. Every other
+chamber's first pulse arrived 4 ms or more later, landing on a network the
+phasic drive had already stirred, and separated less as a result.
+
+Measured on a 3 s run: at step 2, chamber 0 showed **628 differing neurons
+while all four others showed exactly 0**. It never lost the head start.
+
+| chamber | mean level | cumulative distance |
+|---|---|---|
+| 0 | 74% | **78,677,610** |
+| 1 | 61% | 53,615,968 |
+| 2 | 44% | 53,559,779 |
+| 3 | 62% | 53,406,349 |
+| 4 | 92% | 53,473,997 |
+
+The giveaway is that divergence did not track stimulation at all. Chamber 4 was
+the hottest at 92% and diverged least; chamber 0 started at the lowest seeded
+level, 15%, and diverged 47% more than everything else.
+
+**This is the same class of bug as the DN block imbalance**: an artefact of
+indexing that makes one chamber permanently special, so the apparatus decides
+rather than the operator. Phases are now `(c + 1) * min_period / 6`, so no
+chamber sits at 0. Spread falls from **1.47x to 1.01x**.
