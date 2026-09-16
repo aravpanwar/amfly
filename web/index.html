@@ -308,10 +308,12 @@ bench.position.set(0, BENCH_TOP - BENCH_H / 2, 0);
 bench.castShadow = true; bench.receiveShadow = true;
 scene.add(bench);
 
-// Deeper than square, so the two sideways labels have bench to sit on. At 2.6
-// they ran to the very edge; 3.4 leaves them clear of it.
+// Back to 2.6 square. It was widened to 2.9 by 3.4 for labels that were then
+// turned sideways and placed beside their lamps rather than behind them, so
+// the extra bench bought nothing: the sideways label is 0.213 wide against a
+// 1.02 one, and it clears the original bench with room to spare.
 const opBench = new THREE.Mesh(
-  new THREE.BoxGeometry(2.9, 0.5, 3.4),
+  new THREE.BoxGeometry(2.6, 0.5, 2.6),
   new THREE.MeshStandardMaterial({ color: '#232830', roughness: 0.55, metalness: 0.35 })
 );
 opBench.position.set(0, BENCH_TOP - BENCH_H / 2, -3.6);
@@ -1150,9 +1152,10 @@ for (const spec of [
   // widened to make room for it. Sideways text is 1.02 deep, so it needs its
   // own stretch of bench rather than the lamp's.
   //
-  // z=-2.85 is 0.75 toward the viewer from the lamp at -3.6, which clears the
-  // 0.13 housing and still sits well inside the 3.4-deep bench.
-  groundLabel(spec.label, spec.ink, spec.x, -2.85);
+  // z=-2.95 is 0.65 toward the viewer from the lamp at -3.6. That clears the
+  // 0.13 housing and leaves 0.14 of bench beyond the label's near edge; at
+  // -2.85 it was 0.04, which reads as the text about to slide off.
+  groundLabel(spec.label, spec.ink, spec.x, -2.95);
 
   statusLeds.push({ led, glow, key: spec.key });
 }
