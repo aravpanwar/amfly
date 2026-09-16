@@ -1613,10 +1613,10 @@ function apply(f) {
       // no longer a floor under them.
       const own = Math.sin(time * (7 + tw * 19) + k * 2.3);
       L.mesh.rotation.z = L.base.z + L.sx * 0.06
-        + (seize * 0.62 + own * 0.38) * (0.016 + tw * 0.95);
+        + (seize * 0.62 + own * 0.38) * (0.02 + tw * 1.55);
       L.mesh.rotation.x = L.base.x
         + (seize * 0.5 + Math.cos(time * (6 + tw * 15) + k) * 0.5)
-          * (0.011 + tw * 0.52);
+          * (0.015 + tw * 0.85);
     }
     // The whole body jerks against the pin, not just the limbs. A fly that
     // convulses only from the knees down reads as a puppet.
@@ -1625,16 +1625,23 @@ function apply(f) {
     // cannot go anywhere: it can only strain against the thing holding it.
     // A large rotation would read as the fly coming loose and would undo what
     // the mount establishes.
-    // More strain against the pin. Roughly doubled, but still small in
-    // absolute terms: the pin runs through the thorax, so the body can only
-    // fight what is holding it. Past about 0.2 rad it starts to read as the
-    // fly coming loose, which would undo the mount.
-    c.core.rotation.z = seize * tw * 0.16;
-    c.core.rotation.x = Math.sin(time * 27 + 0.9) * tw * 0.10;
+    // Strain against the pin.
+    //
+    // The limbs now throw about as far as a real joint allows, 90 degrees at
+    // the leg and 102 at the wing hinge, which is inside what a fly can
+    // physically do rather than beyond it. The convulsion is authored but the
+    // range it moves through is not absurd.
+    //
+    // The BODY stays comparatively small. The pin runs through the thorax, so
+    // it can only fight what is holding it, and past about 0.3 rad the
+    // rotation starts to read as the fly working loose, which would undo the
+    // mount. 0.26 is close to that line without crossing it.
+    c.core.rotation.z = seize * tw * 0.26;
+    c.core.rotation.x = Math.sin(time * 27 + 0.9) * tw * 0.17;
     // A small lift as well, so the convulsion is not purely rotational. The
     // body strains UP the pin and settles back rather than only twisting.
     c.core.position.y = c.core.userData.baseY
-      + Math.abs(seize) * tw * 0.035;
+      + Math.abs(seize) * tw * 0.055;
     // Beat about Z, the hinge. wing_left/right are parent transforms whose own
     // rotation already places the wing along the body; writing rotation.x
     // every frame overwrote that placement and folded them flat into the
@@ -1650,7 +1657,7 @@ function apply(f) {
       // as flight, which is the one thing a pinned fly being shocked is not
       // doing; sharing the jolt term makes them part of the convulsion.
       const beat = (Math.sin(time * (7 + tw * 40)) * 0.45 + seize * 0.55)
-        * (0.025 + tw * 1.05);
+        * (0.03 + tw * 1.75);
       w.pivot.rotation.set(w.base.x, w.base.y, w.base.z + beat);
     }
     // Firing rate makes the core breathe, so a chamber is never quite still.
