@@ -135,3 +135,68 @@ does. Those are real and they stand on their own.
 Visible convulsion, if it is wanted, still needs `DNp01` driven directly and
 hard, declared as an authored intervention. That is a separate change and must
 not be presented as something the electrode produces on its own.
+
+## Making the fly visibly convulse: measured, and harder than expected
+
+Two routes tested. The obvious one does not work.
+
+### Driving the escape command neurons does nothing
+
+The 12 escape neurons (DNp01, 02, 03, 04, 09, 11, two each) were driven
+directly at a range of amplitudes, with the 708 VNC motor neurons as the
+readout since those are what a convulsion would actually show.
+
+**Motor output saturates immediately.** At 20 mV it is 3,713 spikes; at 400 mV
+it is 3,686. Twenty times the current for no change, because the escape
+neurons hit their refractory ceiling and everything downstream flattens. This
+is the same saturation already recorded for heat in
+`docs/negative-results.md`: amplitude is not a lever in this model.
+
+**Worse, against a realistic baseline it is slightly negative.** With the
+phasic sensory drive the real runs use, motor spikes before the escape burst
+were 3,126 over 300 steps and 2,875 during it: **0.92x**. Driving the escape
+pathway *reduces* motor output marginally, because the network is already
+saturated by the baseline drive and the added input lands on neurons that are
+mostly refractory.
+
+So the escape circuit cannot deliver a convulsion here. It is present and
+wired, and driving it changes nothing visible.
+
+### Driving the motor neurons directly does work
+
+The 708 VNC motor neurons, driven directly against the same realistic
+baseline:
+
+| amplitude | motor spikes | vs off |
+|---|---|---|
+| 0 mV | 2,875 | 1.00x |
+| 10 mV | 3,447 | 1.20x |
+| 25 mV | 4,098 | 1.43x |
+| 60 mV | 5,019 | 1.75x |
+
+This scales properly rather than saturating, and 1.75x is a large enough
+change to animate against. Compare the existing figure of about 3% that heat
+moves motor firing by.
+
+### What this means, and the honesty cost
+
+A convulsion would have to come from **stimulating motor neurons directly**,
+and that is a bigger authored intervention than driving the escape circuit
+would have been. It is not the escape reflex: it is current injected into the
+output stage, bypassing the command neurons that would normally decide to
+fire it.
+
+If it ships it must be labelled exactly that way, in the README and on screen.
+Something like: "motor neurons stimulated directly. This is not an escape
+response; the connectome contains the escape circuit but driving it produces
+no motor change in this model."
+
+The alternative is accepting that the fly does not visibly convulse, and
+saying why, which is itself the more interesting finding: **the alarm bell is
+wired, reachable, and ringing it does nothing.**
+
+### Not yet decided
+
+Whether to ship the direct motor drive at all. It is a real result either way
+and both options are defensible; what is not defensible is showing a
+convulsion and implying the fly produced it.
