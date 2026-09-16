@@ -69,10 +69,36 @@ def main() -> int:
     idx_all = np.flatnonzero(matched)
     log.info("connectome neurons with a soma: %d of %d", len(idx_all), c.n)
 
-    # Subsample by stride, not randomly: no RNG anywhere in this project.
-    stride = max(1, len(idx_all) // args.points)
-    idx = idx_all[::stride][: args.points]
+    # Keep every RECORDED neuron, then fill the rest with structure.
+    #
+    # This used to stride the whole cloud blindly and then ask which of the
+    # survivors happened to be recorded. The answer was 3,152 of 22,014: the
+    # stride threw away 86% of the neurons whose activity we actually have, and
+    # the tiles showed a sparse scatter over a dense dead cloud.
+    #
+    # Recorded neurons are the only ones that can ever light up, so they are
+    # selected first and unconditionally. The remainder of the budget goes to
+    # evenly strided unrecorded neurons, which give the brain its shape.
+    #
+    # Still no RNG: the recorded set is fixed by the run and the filler is a
+    # stride over sorted indices.
+    rec_set = np.asarray(run["subset"], dtype=np.int64)
+    is_rec = np.isin(idx_all, rec_set)
+    rec_idx = idx_all[is_rec]
+    other_idx = idx_all[~is_rec]
+
+    budget = max(args.points - len(rec_idx), 0)
+    if budget and len(other_idx):
+        st = max(1, len(other_idx) // budget)
+        fill = other_idx[::st][:budget]
+    else:
+        fill = other_idx[:0]
+    idx = np.sort(np.concatenate([rec_idx, fill]))
     xyz = soma_xyz[order[pos_in_soma[idx]]]
+    log.info(
+        "points: %d recorded (all of them) + %d for structure",
+        len(rec_idx), len(fill),
+    )
 
     # Centre and scale to roughly unit size; the browser scales from there.
     xyz = xyz - xyz.mean(axis=0)
@@ -149,6 +175,21 @@ def main() -> int:
     size_mb = args.out.stat().st_size / 1e6
     log.info("wrote %s: %.1f MB (%d points x %d frames x %d instances)",
              args.out, size_mb, len(idx), frames, N_INSTANCES)
+
+    # Also write a gzipped copy, because the raw file is mostly zeros.
+    #
+    # Keeping every recorded neuron takes the live count from 3,152 to 18,530
+    # and the file from 17 MB to 100 MB, which is too much to pull into a
+    # browser. But 75% of those bytes are zero, since a neuron is silent in
+    # most frames, and the block compresses to about 18% of its size: the old
+    # file size with nearly six times the detail.
+    #
+    # A static host with gzip serves this transparently. python -m http.server
+    # does not, so the page still loads the raw file locally.
+    import gzip
+    gz = Path(str(args.out) + ".gz")
+    gz.write_bytes(gzip.compress(args.out.read_bytes(), 6))
+    log.info("wrote %s: %.1f MB compressed", gz, gz.stat().st_size / 1e6)
     return 0
 
 

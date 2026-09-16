@@ -1413,7 +1413,10 @@ function drawTraces(f) {
 // Six brain tiles in the side dashboard, not floating in the scene. Each is a
 // fixed projection of the same 24,000 soma positions, so the six are directly
 // comparable: the same neuron sits at the same pixel in every tile.
-const BRAIN_W = 190, BRAIN_H = 118;
+// Larger tiles, because 18,530 live points cannot land on 190x118 without
+// piling several neurons into every pixel. At 240x150 the same cloud spreads
+// over 1.6x the area, so dense and sparse regions separate.
+const BRAIN_W = 240, BRAIN_H = 150;
 const brainBox = document.querySelector('#brains');
 const brainTiles = [];
 
@@ -1460,8 +1463,12 @@ restCanvas.width = BRAIN_W * 2; restCanvas.height = BRAIN_H * 2;
 {
   const rc = restCanvas.getContext('2d');
   rc.scale(2, 2);
-  rc.fillStyle = '#23252c';
-  for (let i = 0; i < BMETA.points; i++) rc.fillRect(PX[i], PY[i], 1, 1);
+  // Sub-pixel dots rather than 1x1 rects. At 2x backing scale a 1x1 fillRect
+  // snaps to the device grid and the cloud reads as a coarse stipple; 0.8 with
+  // partial coverage lets dense regions build up tone, so the structure of the
+  // brain shows instead of a uniform speckle.
+  rc.fillStyle = 'rgba(52,56,68,0.85)';
+  for (let i = 0; i < BMETA.points; i++) rc.fillRect(PX[i] - 0.4, PY[i] - 0.4, 0.8, 0.8);
 }
 
 function drawBrains(f) {
@@ -1471,17 +1478,27 @@ function drawBrains(f) {
     ctx.clearRect(0, 0, BRAIN_W, BRAIN_H);
     ctx.drawImage(restCanvas, 0, 0, BRAIN_W, BRAIN_H);
 
+    // Additive, so overlapping activity accumulates instead of the last dot
+    // drawn winning. With 18,530 live points many land on the same pixel, and
+    // source-over made a dense active region look identical to a sparse one.
+    ctx.globalCompositeOperation = 'lighter';
+
     const off = (f * 6 + i) * stride;
     for (let k = 0; k < stride; k++) {
       const a = B_ACT[off + k] / 255;
       if (a <= 0) continue;
       const p = B_LIVE[k];
+      // Faint activity stays visible: a linear alpha put most of the cloud
+      // below the point where it reads at all, so the tile looked far emptier
+      // than the data is.
+      const v = Math.pow(a, 0.65);
       ctx.fillStyle = isOp
-        ? `rgba(110,170,255,${0.35 + a * 0.65})`
-        : `rgba(255,${(90 + a * 90) | 0},60,${0.35 + a * 0.65})`;
-      const r = 1 + a * 2;
+        ? `rgba(90,150,255,${0.12 + v * 0.5})`
+        : `rgba(255,${(70 + v * 110) | 0},45,${0.12 + v * 0.5})`;
+      const r = 0.7 + v * 1.6;
       ctx.fillRect(PX[p] - r / 2, PY[p] - r / 2, r, r);
     }
+    ctx.globalCompositeOperation = 'source-over';
   }
 }
 
