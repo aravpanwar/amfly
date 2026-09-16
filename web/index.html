@@ -294,13 +294,16 @@ function makeChamber(x, isOperator) {
   }
   core.material = skin;  // apply() drives this one material
 
-  // Scale to fill most of the 1.5 cage, then STAND it on the floor rather
-  // than centring it. Centring left the flies hovering mid-cage, which reads
-  // as floating in a vitrine; a fly resting on the floor of a sealed box reads
-  // as confined.
+  // MOUNTED, not standing.
   //
-  // Centre horizontally but align the bounding box's bottom to the cage floor,
-  // so the legs meet the ground rather than the body's centre sitting at it.
+  // The fly used to rest on the cage floor, which reads as an animal that
+  // could walk away and has chosen not to. It hangs on a pin now, driven down
+  // through the thorax into the base plate, the way a preserved specimen is
+  // mounted. The stillness stops needing an explanation: it is not holding
+  // position, it is fixed in place.
+  //
+  // The pin is also the heat source, so the mechanism is visible rather than
+  // implied. Heat arrives through the thing holding it there.
   const box = new THREE.Box3().setFromObject(rig);
   const span = Math.max(...box.getSize(new THREE.Vector3()).toArray());
   const baseScale = 1.25 / span;
@@ -310,8 +313,11 @@ function makeChamber(x, isOperator) {
   const ctr = b2.getCenter(new THREE.Vector3());
   rig.position.x -= ctr.x;
   rig.position.z -= ctr.z;
-  // Cage interior floor sits at -0.75 in group space (box is 1.5 tall).
-  rig.position.y -= b2.min.y + 0.75 / baseScale;
+  // Lift clear of the floor so the legs hang. Cage interior floor is at -0.75;
+  // MOUNT_Y is where the body centre sits, high enough that the legs dangle
+  // without the abdomen touching down.
+  const MOUNT_Y = -0.18;
+  rig.position.y -= ctr.y - MOUNT_Y / baseScale;
 
   const wings = [];
   for (const side of ['left', 'right']) {
@@ -330,6 +336,48 @@ function makeChamber(x, isOperator) {
 
   core.userData = { wings, legs, skin, baseScale };
   g.add(core);
+
+  // The mounting pin. Runs from the base plate up through the thorax and out
+  // the top, as an entomological pin does.
+  //
+  // Two materials, deliberately. The shaft is dull steel and stays cold; only
+  // the segment inside the body glows, so the heat reads as entering at the
+  // thorax rather than the whole pin being hot. A uniformly glowing rod would
+  // look like a lamp. This looks like something being conducted into an
+  // animal.
+  const PIN_TOP = 0.62;
+  const PIN_BOT = -0.79;
+  const pinShaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, PIN_TOP - PIN_BOT, 10),
+    new THREE.MeshStandardMaterial({
+      color: '#b9c0c8', roughness: 0.28, metalness: 0.95,
+    })
+  );
+  pinShaft.position.y = (PIN_TOP + PIN_BOT) / 2;
+  pinShaft.castShadow = true;
+  g.add(pinShaft);
+
+  // The heated segment, sitting where the pin passes through the thorax.
+  const pinHot = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.019, 0.019, 0.42, 12),
+    new THREE.MeshStandardMaterial({
+      color: '#4a4036', emissive: isOperator ? '#5590d8' : '#ff3b10',
+      emissiveIntensity: 0, roughness: 0.5, metalness: 0.6,
+    })
+  );
+  pinHot.position.y = MOUNT_Y;
+  g.add(pinHot);
+
+  // A small head on the pin, so it reads as a pin and not a rod.
+  const pinHead = new THREE.Mesh(
+    new THREE.SphereGeometry(0.032, 12, 10),
+    new THREE.MeshStandardMaterial({
+      color: '#0f1114', roughness: 0.35, metalness: 0.5,
+    })
+  );
+  pinHead.position.y = PIN_TOP;
+  pinHead.castShadow = true;
+  g.add(pinHead);
 
   // A light inside the box, so heat spills onto the neighbours.
   const lamp = new THREE.PointLight(isOperator ? '#5590d8' : '#ff5a33', 0, 5.5, 2);
@@ -361,7 +409,8 @@ function makeChamber(x, isOperator) {
 
   g.position.y = 0.3;   // stand on the bench
   scene.add(g);
-  return { group: g, core, glass, lamp, pad, edges, isOperator };
+  return { group: g, core, glass, lamp, pad, edges, isOperator,
+           pinHot, pinShaft, pinHead };
 }
 
 for (let i = 0; i < CH; i++) {
@@ -572,7 +621,12 @@ function apply(f) {
     const tw = h * h;
     for (let k = 0; k < c.core.userData.legs.length; k++) {
       const L = c.core.userData.legs[k];
-      L.mesh.rotation.z = L.base.z + Math.sin(time * (5 + tw * 13) + k * 1.7) * (0.01 + tw * 0.22);
+      // The constant term is the hang: the legs are unloaded, because there is
+      // no longer a floor under them. Everything added to it is the struggle,
+      // which now reads as a pinned insect working against the pin rather than
+      // an animal shifting its footing.
+      L.mesh.rotation.z = L.base.z + L.sx * 0.06
+        + Math.sin(time * (5 + tw * 13) + k * 1.7) * (0.01 + tw * 0.22);
       L.mesh.rotation.x = L.base.x + Math.cos(time * (4 + tw * 9) + k) * (0.008 + tw * 0.12);
     }
     // Beat about Z, the hinge. wing_left/right are parent transforms whose own
@@ -595,6 +649,14 @@ function apply(f) {
     // had no visible effect at all.
     c.core.scale.setScalar(c.core.userData.baseScale * (1 + rates[i] * 0.045));
 
+    // The pin is the heat source, so it leads the body rather than following
+    // it. Rising sharply at first and then flattening keeps a low heat still
+    // clearly visible, and means the difference between 80% and 100% still
+    // reads instead of both saturating to white.
+    c.pinHot.material.emissiveIntensity = Math.pow(h, 0.7) * 5.2;
+    // The shaft picks up a little of it near the body, conducting outward.
+    c.pinShaft.material.emissive.setRGB(h * 0.45, h * 0.11, 0);
+
     c.lamp.intensity = h * 1.9;
     c.pad.material.opacity = 0.12 + h * 0.34;
     c.pad.scale.setScalar(0.8 + h * 0.3);
@@ -604,13 +666,19 @@ function apply(f) {
     labels[i].style.color = h > 0.5 ? '#ff7a55' : (h > 0.2 ? '#c9a227' : '#6e6e74');
   }
 
-  // The operator is never heated. Its core tracks its own firing rate only.
+  // The operator is never heated, so its pin never glows. It is mounted on the
+  // same kind of pin as the five, which is the point: the thing at the buttons
+  // is held in place by the same apparatus as the things it is heating.
   const opRate = rates[DATA.meta.operator];
   operator.core.material.emissiveIntensity = 0.5 + opRate * 2.2;
   operator.core.scale.setScalar(operator.core.userData.baseScale * (1 + opRate * 0.045));
   for (let k = 0; k < operator.core.userData.legs.length; k++) {
     const L = operator.core.userData.legs[k];
-    L.mesh.rotation.z = L.base.z + Math.sin(time * 5 + k * 1.7) * 0.015;
+    // Hanging, not standing: a small downward set plus a slow drift, so the
+    // legs read as unloaded rather than bearing weight on a floor that is no
+    // longer under them.
+    L.mesh.rotation.z = L.base.z + L.sx * 0.06
+      + Math.sin(time * 5 + k * 1.7) * 0.015;
   }
   for (const w of operator.core.userData.wings) {
     w.pivot.rotation.set(w.base.x, w.base.y,
