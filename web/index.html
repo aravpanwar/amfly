@@ -543,8 +543,22 @@ function makeChamber(x, isOperator) {
     new THREE.PlaneGeometry(0.62, 0.31),
     new THREE.MeshBasicMaterial({ map: vTex, toneMapped: false })
   );
-  screen.position.set(0, -0.30, 1.05);
-  screen.rotation.x = -0.22;
+  // Faces -z, towards the front of the bench.
+  //
+  // It faced +z on the reasoning that the default camera sits there, but the
+  // view this is actually watched from looks down the row from the front, so
+  // every screen was turned away and read as a black rectangle. Rotating by PI
+  // about Y turns the face forward; the tilt is then +0.22 rather than -0.22,
+  // because the sign of the lean flips with the panel.
+  // Raised so the specimen does not stand in front of its own readout.
+  //
+  // At y=-0.30 the screen sat below the fly's body centre and behind it, so
+  // from the front the fly occluded the digits. Lifting it clear puts the
+  // number above the specimen, which is also how a rack-mounted meter would
+  // actually sit: the equipment reads out above the thing it is wired to.
+  screen.position.set(0, 0.42, 1.05);
+  screen.rotation.y = Math.PI;
+  screen.rotation.x = 0.16;
   g.add(screen);
 
   // A bezel, so the screen reads as a panel meter and not a floating decal.
@@ -554,10 +568,28 @@ function makeChamber(x, isOperator) {
       color: '#15181d', roughness: 0.55, metalness: 0.6,
     })
   );
-  bezel.position.set(0, -0.30, 1.02);
-  bezel.rotation.x = -0.22;
+  // Behind the screen from the new viewing side, so the bezel frames it
+  // instead of hiding it.
+  bezel.position.set(0, 0.42, 1.08);
+  bezel.rotation.x = 0.16;
   bezel.castShadow = true; bezel.receiveShadow = true;
   g.add(bezel);
+
+  // A post down to the bench, because a meter hanging in mid air is the one
+  // thing this scene has spent a long time getting rid of.
+  // Runs from the base plate face (local -0.745) up to the screen bottom
+  // (0.27), so 1.015 tall centred at -0.238. Sized from those two numbers
+  // rather than guessed: a 1.0 post centred at -0.09 left a 0.15 gap above
+  // the plate and the stand floated.
+  const stalk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.028, 1.015, 10),
+    new THREE.MeshStandardMaterial({
+      color: '#20242b', roughness: 0.5, metalness: 0.7,
+    })
+  );
+  stalk.position.set(0, -0.238, 1.09);
+  stalk.castShadow = true;
+  g.add(stalk);
 
   // A base plate under each cage: the cage is mounted equipment, not a
   // floating box.
