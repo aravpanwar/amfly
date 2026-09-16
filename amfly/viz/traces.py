@@ -185,12 +185,22 @@ def dials(heat: np.ndarray, dt_ms: float = 0.1,
     _style(ax)
 
     t = np.arange(len(heat)) * dt_ms
-    # Warm palette: hotter chambers read hotter.
+    # A colour belongs to a CHAMBER, not to its rank.
+    #
+    # This used to sort by the heat at the last frame. In a still that merely
+    # looks tidy; in the animated version it is a real bug, because each frame
+    # re-sorts on its own final value and the five lines therefore swap
+    # colours as they cross. Measured across a 180-frame reveal the order
+    # changed at almost every sampled frame, so no line could be followed for
+    # more than a second. Since the buttons started switching on a margin the
+    # chambers cross more often, which made it worse.
+    #
+    # Fixed colours also mean the same chamber is the same colour in the plot,
+    # in the browser scene and between runs.
     colors = ["#d94a3d", "#e07a3f", "#c9a227", "#6f9e4c", "#4a7fb5"]
-    order = np.argsort(-heat[-1, : len(CHAMBERS)])
-    for rank, c in enumerate(order):
+    for c in range(min(heat.shape[1], len(CHAMBERS))):
         ax.plot(t, heat[:, c] / amplitude_mv * 100.0, lw=1.6,
-                color=colors[rank % len(colors)], label=f"chamber {c}")
+                color=colors[c % len(colors)], label=f"chamber {c}")
 
     # Headroom above 100 so the legend never sits on top of a pinned line.
     if xmax_ms is not None:
