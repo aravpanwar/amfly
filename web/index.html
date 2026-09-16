@@ -609,10 +609,19 @@ function apply(f) {
     const h = heat[i];
     const c = chambers[i];
 
+    // The FLY does not change colour. The pin does.
+    //
+    // The body used to take the full heat ramp, so a hot chamber held a red
+    // fly and a cold one held a grey fly. That reads as the animal being made
+    // of heat rather than having heat done to it, and it throws away the one
+    // thing the mount established: the apparatus is the hot thing, the fly is
+    // just what it is attached to.
+    //
+    // The body now keeps its own dark chitin throughout and is only LIT by
+    // the pin and the cage lamp, the way a real object near something hot is.
+    // A faint emissive floor stops the silhouette going black at low heat.
     ramp(h, tmp);
-    c.core.material.emissive.copy(tmp);
-    c.core.material.color.copy(tmp).multiplyScalar(0.22).addScalar(0.03);
-    c.core.material.emissiveIntensity = 0.12 + h * 0.85;
+    c.core.material.emissiveIntensity = 0.05 + h * 0.10;
     c.lamp.color.copy(tmp);
 
     // Hotter chambers twitch harder. This is an authored visual gain on a
@@ -653,9 +662,21 @@ function apply(f) {
     // it. Rising sharply at first and then flattening keeps a low heat still
     // clearly visible, and means the difference between 80% and 100% still
     // reads instead of both saturating to white.
-    c.pinHot.material.emissiveIntensity = Math.pow(h, 0.7) * 5.2;
-    // The shaft picks up a little of it near the body, conducting outward.
-    c.pinShaft.material.emissive.setRGB(h * 0.45, h * 0.11, 0);
+    // The pin now carries the whole signal, since the body no longer does.
+    //
+    // Colour shifts with temperature the way heated steel does: dull red at
+    // the bottom of the range, orange through the middle, and toward white at
+    // the top. Intensity alone would make a cold pin merely dim, which is
+    // hard to read against a dark cage; a colour change is legible at a
+    // glance even when the pin is small on screen.
+    c.pinHot.material.emissiveIntensity = 0.35 + Math.pow(h, 0.65) * 6.5;
+    c.pinHot.material.emissive.setRGB(
+      0.55 + h * 0.45,
+      0.05 + h * h * 0.62,
+      0.02 + h * h * h * 0.45
+    );
+    // The shaft conducts outward from the body, falling off along its length.
+    c.pinShaft.material.emissive.setRGB(h * 0.5, h * h * 0.16, 0);
 
     c.lamp.intensity = h * 1.9;
     c.pad.material.opacity = 0.12 + h * 0.34;
