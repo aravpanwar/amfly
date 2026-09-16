@@ -308,8 +308,10 @@ bench.position.set(0, BENCH_TOP - BENCH_H / 2, 0);
 bench.castShadow = true; bench.receiveShadow = true;
 scene.add(bench);
 
+// Deeper than square, so the two sideways labels have bench to sit on. At 2.6
+// they ran to the very edge; 3.4 leaves them clear of it.
 const opBench = new THREE.Mesh(
-  new THREE.BoxGeometry(2.6, 0.5, 2.6),
+  new THREE.BoxGeometry(2.9, 0.5, 3.4),
   new THREE.MeshStandardMaterial({ color: '#232830', roughness: 0.55, metalness: 0.35 })
 );
 opBench.position.set(0, BENCH_TOP - BENCH_H / 2, -3.6);
@@ -464,7 +466,7 @@ function makeChamber(x, isOperator) {
     }
   }
 
-  core.userData = { wings, legs, skin, baseScale };
+  core.userData = { wings, legs, skin, baseScale, baseY: core.position.y };
   g.add(core);
 
   // The mounting pin. Runs from the base plate up through the thorax and out
@@ -1060,9 +1062,16 @@ function groundLabel(text, colour, x, z) {
       map: tex, transparent: true, toneMapped: false, depthWrite: false,
     })
   );
-  // Flat on the bench, reading toward the front of the scene.
+  // Flat on the bench and turned sideways, running front to back rather than
+  // left to right.
+  //
+  // Read across the bench, a 1.02-wide label centred on a lamp at x=0.95 ran
+  // from -1.46 to -0.44: 0.37 of it disappeared under the operator's 1.62
+  // base plate and 0.16 hung off the 2.6 bench entirely, so DOPAMINE lost its
+  // first letter at both ends of the problem. Turned sideways the footprint is
+  // 0.213 across instead of 1.02, which clears the plate with room to spare.
   m.rotation.x = -Math.PI / 2;
-  m.rotation.z = Math.PI;
+  m.rotation.z = -Math.PI / 2;
   m.position.set(x, BENCH_TOP + 0.004, z);
   scene.add(m);
   return m;
@@ -1109,7 +1118,9 @@ for (const spec of [
   unit.add(glow);
 
   // The name on the bench, just in front of its own lamp.
-  groundLabel(spec.label, spec.ink, spec.x, -3.6 + 0.42);
+  // Beside the lamp, not in front of it: sideways text reads down the bench,
+  // so it wants the depth the bench has rather than the width it does not.
+  groundLabel(spec.label, spec.ink, spec.x, -3.6);
 
   statusLeds.push({ led, glow, key: spec.key });
 }
@@ -1494,10 +1505,10 @@ function apply(f) {
       // no longer a floor under them.
       const own = Math.sin(time * (7 + tw * 19) + k * 2.3);
       L.mesh.rotation.z = L.base.z + L.sx * 0.06
-        + (seize * 0.62 + own * 0.38) * (0.012 + tw * 0.40);
+        + (seize * 0.62 + own * 0.38) * (0.016 + tw * 0.95);
       L.mesh.rotation.x = L.base.x
         + (seize * 0.5 + Math.cos(time * (6 + tw * 15) + k) * 0.5)
-          * (0.008 + tw * 0.2);
+          * (0.011 + tw * 0.52);
     }
     // The whole body jerks against the pin, not just the limbs. A fly that
     // convulses only from the knees down reads as a puppet.
@@ -1506,8 +1517,16 @@ function apply(f) {
     // cannot go anywhere: it can only strain against the thing holding it.
     // A large rotation would read as the fly coming loose and would undo what
     // the mount establishes.
-    c.core.rotation.z = seize * tw * 0.075;
-    c.core.rotation.x = Math.sin(time * 27 + 0.9) * tw * 0.045;
+    // More strain against the pin. Roughly doubled, but still small in
+    // absolute terms: the pin runs through the thorax, so the body can only
+    // fight what is holding it. Past about 0.2 rad it starts to read as the
+    // fly coming loose, which would undo the mount.
+    c.core.rotation.z = seize * tw * 0.16;
+    c.core.rotation.x = Math.sin(time * 27 + 0.9) * tw * 0.10;
+    // A small lift as well, so the convulsion is not purely rotational. The
+    // body strains UP the pin and settles back rather than only twisting.
+    c.core.position.y = c.core.userData.baseY
+      + Math.abs(seize) * tw * 0.035;
     // Beat about Z, the hinge. wing_left/right are parent transforms whose own
     // rotation already places the wing along the body; writing rotation.x
     // every frame overwrote that placement and folded them flat into the
@@ -1523,7 +1542,7 @@ function apply(f) {
       // as flight, which is the one thing a pinned fly being shocked is not
       // doing; sharing the jolt term makes them part of the convulsion.
       const beat = (Math.sin(time * (7 + tw * 40)) * 0.45 + seize * 0.55)
-        * (0.02 + tw * 0.44);
+        * (0.025 + tw * 1.05);
       w.pivot.rotation.set(w.base.x, w.base.y, w.base.z + beat);
     }
     // Firing rate makes the core breathe, so a chamber is never quite still.
@@ -1732,8 +1751,14 @@ function apply(f) {
     // Hanging, not standing: a small downward set plus a slow drift, so the
     // legs read as unloaded rather than bearing weight on a floor that is no
     // longer under them.
+    // Deliberately far smaller than the chambers. The operator is not being
+    // stimulated, so it should not convulse: the difference between its
+    // working and their thrashing is the point. Raised a little from 0.015
+    // because at that amplitude it read as a still image next to five moving
+    // bodies, and a dead-still operator is its own kind of wrong.
     L.mesh.rotation.z = L.base.z + L.sx * 0.06
-      + Math.sin(time * 5 + k * 1.7) * 0.015;
+      + Math.sin(time * 5 + k * 1.7) * 0.055
+      + Math.sin(time * 13.7 + k * 0.9) * 0.02;
   }
   for (const w of operator.core.userData.wings) {
     w.pivot.rotation.set(w.base.x, w.base.y,
