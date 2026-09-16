@@ -1,4 +1,4 @@
-"""The operator is not indifferent. It is trapped.
+"""Feeds chamber state back to the operator as reward and punishment.
 
 This replaces the original design, in which the operator never received
 anything from the chambers. `project.md` chose indifference over cruelty, and

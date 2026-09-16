@@ -18,7 +18,7 @@ import numpy as np
 
 @dataclass
 class Verdict:
-    """What a run actually showed, in terms that can be stated plainly."""
+    """What a run actually showed."""
 
     diverged: bool
     onset_step: int | None

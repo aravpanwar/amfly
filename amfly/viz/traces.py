@@ -1,4 +1,4 @@
-"""Six traces, equal visual weight.
+"""Plots: six firing-rate traces, the dial levels, and divergence.
 
 project.md is right that this is the whole thing: if the divergence does not
 read on a plot, no amount of rendering saves it. So the trace panels are the

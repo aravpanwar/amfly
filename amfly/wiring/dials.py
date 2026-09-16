@@ -1,4 +1,4 @@
-"""Five dials, not one switch.
+"""Five continuous heat levels, one per chamber.
 
 The operator does not choose which chamber is heated. It sets how much, for each
 of the five, continuously. Every chamber is always being heated by some amount.

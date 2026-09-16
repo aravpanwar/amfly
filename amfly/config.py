@@ -1,8 +1,8 @@
-"""Every constant in one place, frozen.
+"""All the constants, in one place.
 
-Numbers here that describe the dataset were measured from the actual files, not
-copied from anyone's README. See MEASURED below. If a number in this file ever
-disagrees with the data, the data wins and the test suite should fail loudly.
+The dataset numbers in MEASURED come from the v1.0 files themselves, not from
+a README. tests/test_loader.py checks them against the data, so a mismatch
+shows up as a test failure.
 """
 
 from dataclasses import dataclass, field

@@ -7,8 +7,8 @@ of simulated time.
 The GPU path is only safe with determinism forced on. Left at defaults, PyTorch
 may pick non-deterministic reductions and TF32 silently truncates fp32 mantissa
 bits, either of which would decorrelate the six instances from arithmetic noise
-rather than from heat. That failure looks exactly like success, so the settings
-below are mandatory rather than advisory.
+rather than from heat. The six would drift apart and the plots would look
+correct, so neither setting below is optional.
 
 Install note: a CUDA build is required. `torch` from PyPI defaults to CPU-only,
 and `torch.cuda.is_available()` returning False means the slow path.

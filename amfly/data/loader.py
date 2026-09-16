@@ -9,7 +9,7 @@ Two traps live here, both found by measurement rather than by reading docs:
    that are not traced neurons. Loading it naively as int64 costs ~3.6GB. We
    project to three columns, filter both endpoints, then downcast.
 
-2. Row order is load-bearing. We sort bodyId ascending before assigning indices,
+2. Row order matters. We sort bodyId ascending before assigning indices,
    which makes the CSR ordering canonical. Without it, the "bit-identical across
    machines" claim is false and the whole piece is unverifiable.
 """

@@ -1,4 +1,4 @@
-"""The sixth fly, and the dial.
+"""Maps the operator's descending-neuron activity to a dial position.
 
 The operator is not special. Same graph, same weights, same parameters as the
 five in the chambers. It differs only in where it sits in the wiring: its
@@ -6,7 +6,7 @@ descending-neuron activity is read out and used to point a dial, and the dial
 selects which chamber gets heated.
 
 It receives no feedback. It never sees the chambers, and nothing about their
-state reaches it. Indifference rather than cruelty.
+state reaches it.
 
 The readout is a fixed rule, not a trained decoder. Partition the 1,314
 descending neurons into 5 contiguous blocks by sorted bodyId, count spikes per

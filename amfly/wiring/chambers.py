@@ -1,4 +1,4 @@
-"""Five sealed chambers, and the heat.
+"""Delivers the stimulus into the five chamber instances.
 
 Heat is delivered as sustained depolarising current into the thermoreceptor
 neurons of exactly one chamber at a time, matching the sustained firing of fly
@@ -186,7 +186,7 @@ class Electrode:
     # Driving the 708 VNC motor neurons directly does scale: 1.20x at 10 mV,
     # 1.43x at 25 mV, 1.75x at 60 mV. That is current injected into the output
     # stage, bypassing the command neurons that would normally decide to fire
-    # it, which is the honest description and the one the README carries.
+    # it. The README says exactly that.
     motor_indices: np.ndarray | None = None
     motor_mv: float = 60.0
     # Pulse shape. 0.4ms at dt=0.1ms is 4 steps, within the range used for

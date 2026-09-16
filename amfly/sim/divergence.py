@@ -8,7 +8,7 @@ the piece. See docs/negative-results.md.
 What actually matters is spike identity. Two instances are the same only while
 the same neurons fire at the same step.
 
-`hamming` is the honest measure and it is cheap: one XOR over the boolean spike
+`hamming` measures that directly and it is cheap: one XOR over the boolean spike
 matrix per step, no allocation of the full history.
 """
 
