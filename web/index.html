@@ -813,6 +813,73 @@ for (let i = 0; i < CH; i++) {
   chamberWires.push([wire(pts, '#333842')]);
 }
 
+// ------------------------------------------------- the operator's own lamps
+//
+// Two LEDs beside the operator, green for reward and red for punishment, so
+// its state is readable in the 3D view without the side panel. The scene
+// should stand on its own in a clip, and until now the only thing saying what
+// the operator was feeling was HTML.
+//
+// Placed in WORLD space on its own little unit, not parented to the operator.
+// The operator group is rotated by PI to face the chambers, so anything added
+// to it has its axes flipped and "right" would come out on the left.
+//
+// Deliberately NOT mirroring the chamber console. These two are the operator's
+// own readout, not another five-way selector, so a separate smaller housing
+// keeps the two jobs visually distinct.
+const statusLeds = [];
+{
+  const unit = new THREE.Group();
+  // +x is the camera's right. 0.85 clears the fly's ~1.25 body and still sits
+  // well inside the 2.6 bench.
+  unit.position.set(0.85, BENCH_TOP, -3.6);
+  scene.add(unit);
+
+  const housing = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.14, 0.62),
+    new THREE.MeshStandardMaterial({
+      color: '#1d2027', roughness: 0.5, metalness: 0.7,
+    })
+  );
+  housing.position.y = 0.07;
+  housing.castShadow = true; housing.receiveShadow = true;
+  unit.add(housing);
+
+  // Parallel to the fly, so the pair runs along the body rather than across
+  // it: reward forward, punishment back.
+  for (const spec of [
+    { z: -0.15, colour: '#3fe07a', key: 'reward' },
+    { z:  0.15, colour: '#ff4a22', key: 'punish' },
+  ]) {
+    const socket = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.062, 0.062, 0.03, 16),
+      new THREE.MeshStandardMaterial({
+        color: '#0d0f13', roughness: 0.8, metalness: 0.3,
+      })
+    );
+    socket.position.set(0, 0.145, spec.z);
+    socket.receiveShadow = true;
+    unit.add(socket);
+
+    const led = new THREE.Mesh(
+      new THREE.SphereGeometry(0.048, 16, 12),
+      new THREE.MeshStandardMaterial({
+        color: '#15161a', roughness: 0.25, metalness: 0.1,
+        emissive: new THREE.Color(spec.colour), emissiveIntensity: 0,
+      })
+    );
+    led.position.set(0, 0.168, spec.z);
+    led.castShadow = true;
+    unit.add(led);
+
+    const glow = new THREE.PointLight(spec.colour, 0, 1.0, 2.2);
+    glow.position.set(0, 0.24, spec.z);
+    unit.add(glow);
+
+    statusLeds.push({ led, glow, key: spec.key });
+  }
+}
+
 // Panel handles, looked up once.// Panel handles, looked up once. Missing nodes leave UI.rf undefined and the
 // frame loop skips the panel rather than throwing every frame.
 const UI = {
@@ -1305,6 +1372,37 @@ function apply(f) {
   // colour here for the same reason the chambers do.
   operator.rewardLamp.intensity = rw * 3.4;
   operator.punishLamp.intensity = pn * 3.0;
+
+  // The two status LEDs beside it, which is the readable version of the same
+  // thing. The underlighting says the mood of the frame; these say the value.
+  // The two are driven differently, because they are different kinds of thing.
+  //
+  // Measured on this run: reward has a median of 0.000 and sits below 0.1 for
+  // 707 of 900 frames, because it fires when a chamber maxes and decays. It is
+  // an EVENT. Punishment has a median of 0.399 and drops below 0.1 for only 57
+  // frames, because it tracks ongoing pain. It is a CONDITION.
+  //
+  // Driving both the same way made the red LED read as permanently on, at 90%
+  // of frames above a third brightness, and a light that never changes carries
+  // no information. So reward gets a curve that makes its rare spikes bright,
+  // and punishment is rescaled against the band it actually occupies so its
+  // variation is visible instead of being crushed against the top.
+  for (const L of statusLeds) {
+    let lit;
+    if (L.key === 'reward') {
+      // Sharp: mostly dark, and unmistakable when it fires.
+      lit = Math.pow(rw, 0.55);
+    } else {
+      // Punishment lives roughly in 0.15..0.85. Mapping that band across the
+      // full range keeps a baseline glow, which is correct because the
+      // operator is nearly always being burned by something, while still
+      // letting the bad moments read as worse.
+      lit = Math.min(1, Math.max(0, (pn - 0.15) / 0.7));
+      lit = 0.12 + Math.pow(lit, 1.35) * 0.88;
+    }
+    L.led.material.emissiveIntensity = 0.06 + lit * 4.4;
+    L.glow.intensity = lit * 1.35;
+  }
 
   // The operator is never heated by a chamber, so its own pin never glows with
   // chamber heat. It is mounted on the same kind of pin as the five, which is
