@@ -1,6 +1,6 @@
 # amfly
 
-![a fly convulsing under stimulation](docs/media/convulsion.gif)
+![the whole bench from above](docs/media/overhead.gif)
 
 Six copies of one fly brain, 166,700 neurons each, running from the same
 measured wiring.
@@ -76,7 +76,7 @@ Screen record it. There is no built-in capture, because the readout, the bars
 and the brain tiles are HTML over the canvas and a canvas recorder loses all
 of them.
 
-![the whole bench from above](docs/media/overhead.gif)
+![a fly convulsing under stimulation](docs/media/convulsion.gif)
 
 ## Figures
 
