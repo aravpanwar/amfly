@@ -161,20 +161,53 @@ scene.add(new THREE.HemisphereLight('#93a6c8', '#1b1b22', 1.15));
 const key = new THREE.DirectionalLight('#ffffff', 1.5);
 key.position.set(4, 9, 6);
 key.castShadow = true;
+// 2048, not 4096. Tightening the camera from a 24-unit box to 15 already
+// bought 1.6x the resolution per unit, and six maps at 4096 would be 88 MB of
+// shadow buffers on a 6GB laptop that is also holding six 272k-triangle
+// flies. 2048 over 15 units still resolves a cable at 4.4 texels.
 key.shadow.mapSize.set(2048, 2048);
-key.shadow.camera.left = -12; key.shadow.camera.right = 12;
-key.shadow.camera.top = 12; key.shadow.camera.bottom = -12;
-key.shadow.bias = -0.0008;
+// Fit the shadow camera to what is actually there.
+//
+// It used to be a 24 by 24 box around a scene about 11 by 9, so more than
+// half the map covered empty room and everything real got a third of the
+// resolution it could have had. At 24 units across a 2048 map, one texel
+// covered 0.0117 units: a pin is 0.024 across and a cable 0.032, so both
+// were two or three texels wide and could not cast anything legible. Tight
+// bounds plus a larger map give 0.0032 per texel, which is seven to ten
+// texels across the thin parts.
+key.shadow.camera.left = -7.5; key.shadow.camera.right = 7.5;
+key.shadow.camera.top = 6.5; key.shadow.camera.bottom = -6.5;
+key.shadow.camera.near = 0.5; key.shadow.camera.far = 22;
+// normalBias offsets along the surface normal and is the right tool for thin
+// geometry; constant bias alone either leaves acne or detaches the shadow
+// from whatever casts it. The fly's shadows were switched off entirely
+// because of acne that this fixes properly.
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.022;
 scene.add(key);
 const fill = new THREE.DirectionalLight('#8fa8d0', 0.55);
 fill.position.set(-6, 3, -4);
 scene.add(fill);
 
-// A hard overhead light per cage. Specimens under inspection, not exhibits.
+// A hard overhead light per specimen. Under inspection, not on display.
+//
+// These are the strongest lights in the scene at intensity 22, and they cast
+// no shadow at all, so each fly was lit hard from above while nothing beneath
+// it darkened. That is most of why the scene read as ungrounded. A spot
+// directly overhead also gives the pool of shadow under each specimen that an
+// examination light should.
 for (let i = 0; i < 5; i++) {
   const sp = new THREE.SpotLight('#cfe0ff', 22, 9, 0.42, 0.55, 1.6);
   sp.position.set((i - 2) * 1.72, 4.2, 0);
   sp.target.position.set((i - 2) * 1.72, -1, 0);
+  sp.castShadow = true;
+  // 1024 is enough for one specimen's pool. Five 2048 maps would cost more
+  // than the key light and show less.
+  sp.shadow.mapSize.set(1024, 1024);
+  sp.shadow.camera.near = 1.5;
+  sp.shadow.camera.far = 9;
+  sp.shadow.bias = -0.0005;
+  sp.shadow.normalBias = 0.02;
   scene.add(sp, sp.target);
 }
 
@@ -189,7 +222,10 @@ const room = new THREE.Mesh(
   new THREE.BoxGeometry(ROOM_W, ROOM_H, ROOM_D), wallMat
 );
 room.position.y = ROOM_H / 2 - 1.05;
-room.receiveShadow = true;
+// No receiveShadow. The material is BackSide, so its faces point away from
+// every light in the scene and can only ever be fully unlit; asking for
+// shadows on them costs a map lookup per fragment and changes nothing.
+room.receiveShadow = false;
 scene.add(room);
 
 const floor = new THREE.Mesh(
@@ -312,13 +348,21 @@ function makeChamber(x, isOperator) {
   const _seen = { wing: [], other: 0 };
   rig.traverse(o => {
     if (!o.isMesh) return;
-    // No shadows on the fly. The scan is 272k triangles with thin overlapping
-    // parts, so shadow-map resolution puts acne and banding across the body
-    // and the legs shadow themselves. The cages and benches still cast, which
-    // is what grounds the scene.
-    o.castShadow = false;
-    o.receiveShadow = false;
+    // The fly casts, at last.
+    //
+    // This was switched off because the scan is 272k triangles with thin
+    // overlapping parts and the shadow map put acne across the body while the
+    // legs shadowed themselves. The cause was bias, not the geometry: a
+    // constant bias cannot serve both a flat plate and a 0.02-thick leg.
+    // normalBias offsets along the surface normal instead and handles both,
+    // so the object the piece is about no longer floats over its own plate.
+    //
+    // Wings do not cast. They are transparent and double-sided, and a shadow
+    // map ignores alpha, so a wing would throw a hard opaque slab across the
+    // body that is far more wrong than no shadow at all.
     const isWing = /wing/i.test(o.name);
+    o.castShadow = !isWing;
+    o.receiveShadow = true;
     o.material = isWing ? wingMat : skin;
     if (isWing) {
       o.visible = true;
@@ -405,6 +449,9 @@ function makeChamber(x, isOperator) {
     })
   );
   pinHot.position.y = MOUNT_Y;
+  // The heated segment is the thickest part of the pin and sits at body
+  // height, so it is what actually throws a shadow down the plate.
+  pinHot.castShadow = true;
   g.add(pinHot);
 
   // A small head on the pin, so it reads as a pin and not a rod.
@@ -548,6 +595,7 @@ for (let i = 0; i < CH; i++) {
     })
   );
   socket.position.set(lx, 0.082, 0);
+  socket.receiveShadow = true;
   panelGroup.add(socket);
 
   const led = new THREE.Mesh(
@@ -558,6 +606,10 @@ for (let i = 0; i < CH; i++) {
     })
   );
   led.position.set(lx, 0.105, 0);
+  // Casts, so a lit LED sits in its socket rather than hovering over it. It
+  // does not receive: a shadow falling across a light that is meant to be on
+  // reads as a dead bulb.
+  led.castShadow = true;
   panelGroup.add(led);
 
   // A small lamp per LED so a lit one spills onto the chassis around it.
@@ -603,6 +655,10 @@ function wire(points, colour, radius) {
       emissive: new THREE.Color('#ff3b10'), emissiveIntensity: 0,
     })
   );
+  // A cable lying on a bench needs its own contact shadow or it reads as
+  // painted on. At 8.7 texels across it is now wide enough to cast one.
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   scene.add(mesh);
   return mesh;
 }
