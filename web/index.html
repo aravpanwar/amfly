@@ -593,15 +593,36 @@ function makeChamber(x, isOperator) {
   // rather than guessed: a 1.0 post centred at -0.09 left a 0.15 gap above
   // the plate and the stand floated.
   if (!isOperator) {
+    // The post stands on the BENCH, not on the plate.
+    //
+    // It was sized to reach the base plate face at local -0.745, but it sits
+    // at z=1.09 while the plate only spans z -0.81 to 0.81. So it stopped
+    // 0.28 beyond the plate's edge, at the plate's height, hanging 0.045 clear
+    // of the bench below it with nothing underneath.
+    //
+    // The bench surface is BENCH_TOP in world terms, which is local -0.79 for
+    // a chamber group, so the post runs from there to the screen bottom at
+    // 0.27: 1.06 tall, centred at -0.26.
     const stalk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.022, 0.028, 1.015, 10),
+      new THREE.CylinderGeometry(0.022, 0.03, 1.06, 10),
       new THREE.MeshStandardMaterial({
         color: '#20242b', roughness: 0.5, metalness: 0.7,
       })
     );
-    stalk.position.set(0, -0.238, 1.09);
+    stalk.position.set(0, -0.26, 1.09);
     stalk.castShadow = true;
     g.add(stalk);
+
+    // A foot, so the post is bolted down rather than balanced.
+    const foot = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.075, 0.085, 0.03, 14),
+      new THREE.MeshStandardMaterial({
+        color: '#22262d', roughness: 0.45, metalness: 0.7,
+      })
+    );
+    foot.position.set(0, -0.775, 1.09);
+    foot.castShadow = true; foot.receiveShadow = true;
+    g.add(foot);
   }
 
   // A base plate under each cage: the cage is mounted equipment, not a
@@ -648,10 +669,20 @@ operator.group.rotation.y = Math.PI;
 // They are placed low and close so the light stays on the operator and does
 // not wash across the five. What is done TO the operator should not look like
 // it is happening to everything.
-operator.rewardLamp = new THREE.PointLight('#48c46e', 0, 2.6, 2.2);
+// Tight underlighting, not a floodlight.
+//
+// These ran at a 2.6 unit range and up to 3.4 intensity, which is most of the
+// operator's bench, so a dopamine hit threw green across the bench, the labels
+// and the fly with no visible source. That is the phantom glow: a lamp big
+// enough to light a room, hidden under a body.
+//
+// 0.85 keeps the light on the underside of the specimen it belongs to, which
+// is what underlighting is meant to do, and leaves the two named lamps beside
+// it to say the same thing legibly.
+operator.rewardLamp = new THREE.PointLight('#48c46e', 0, 0.85, 2.4);
 operator.rewardLamp.position.set(0, -0.62, 0.34);
 operator.group.add(operator.rewardLamp);
-operator.punishLamp = new THREE.PointLight('#ff4a22', 0, 2.6, 2.2);
+operator.punishLamp = new THREE.PointLight('#ff4a22', 0, 0.85, 2.4);
 operator.punishLamp.position.set(0, -0.62, -0.34);
 operator.group.add(operator.punishLamp);
 
@@ -923,12 +954,18 @@ function groundLabel(text, colour, x, z) {
   const g2 = cv.getContext('2d');
   g2.fillStyle = 'rgba(0,0,0,0)';
   g2.fillRect(0, 0, 256, 64);
+  // Plain text, not glowing. These are labels stencilled on a bench, and a
+  // label that glows reads as another indicator, which is exactly what it is
+  // not: the lamp beside it is the indicator and the writing only names it.
+  // Glowing text also competed with the lamp it was labelling.
+  //
+  // toneMapped stays false so the colour survives ACES, but nothing here
+  // emits: the ink is a muted version of the lamp's colour so the pairing is
+  // still obvious without the writing lighting up.
   g2.font = 'bold 34px ui-monospace, Consolas, monospace';
   g2.textAlign = 'center';
   g2.textBaseline = 'middle';
   g2.fillStyle = colour;
-  g2.shadowColor = colour;
-  g2.shadowBlur = 12;
   g2.fillText(text, 128, 34);
   const tex = new THREE.CanvasTexture(cv);
   tex.minFilter = THREE.LinearFilter;
@@ -947,8 +984,8 @@ function groundLabel(text, colour, x, z) {
 }
 
 for (const spec of [
-  { x: -0.95, colour: '#3fe07a', key: 'reward', label: 'DOPAMINE' },
-  { x:  0.95, colour: '#ff4a22', key: 'punish', label: 'HEAT' },
+  { x: -0.95, colour: '#3fe07a', ink: '#4a7d5e', key: 'reward', label: 'DOPAMINE' },
+  { x:  0.95, colour: '#ff4a22', ink: '#8a4a38', key: 'punish', label: 'HEAT' },
 ]) {
   const unit = new THREE.Group();
   unit.position.set(spec.x, BENCH_TOP, -3.6);
@@ -975,12 +1012,19 @@ for (const spec of [
   led.castShadow = true;
   unit.add(led);
 
-  const glow = new THREE.PointLight(spec.colour, 0, 1.3, 2.2);
-  glow.position.y = 0.2;
+  // Tight, and it stays tight.
+  //
+  // At a 1.3 unit range this lit most of the operator's bench, so a dopamine
+  // hit washed green across the bench, the labels and the fly. That read as a
+  // phantom glow with no source, because the source is a 0.13 wide housing and
+  // nothing that small throws light that far. 0.34 keeps the spill on the
+  // lamp's own fitting, which is what makes it look like a lamp.
+  const glow = new THREE.PointLight(spec.colour, 0, 0.34, 2.6);
+  glow.position.y = 0.14;
   unit.add(glow);
 
   // The name on the bench, just in front of its own lamp.
-  groundLabel(spec.label, spec.colour, spec.x, -3.6 + 0.42);
+  groundLabel(spec.label, spec.ink, spec.x, -3.6 + 0.42);
 
   statusLeds.push({ led, glow, key: spec.key });
 }
@@ -1541,8 +1585,8 @@ function apply(f) {
   // without the panel. Green from below when it is paid, red when it is
   // burned. Underlighting rather than tinting the body: the fly keeps its own
   // colour here for the same reason the chambers do.
-  operator.rewardLamp.intensity = rw * 3.4;
-  operator.punishLamp.intensity = pn * 3.0;
+  operator.rewardLamp.intensity = rw * 1.5;
+  operator.punishLamp.intensity = pn * 1.3;
 
   // The two status LEDs beside it, which is the readable version of the same
   // thing. The underlighting says the mood of the frame; these say the value.
