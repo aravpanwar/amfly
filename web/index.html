@@ -5,26 +5,30 @@
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* Dark on light, now that the room is white. Light grey text with a black
+     glow was built for a black room and is invisible against a lit wall. */
   body {
-    background: #0b0b0d;
-    color: #d8d8d8;
+    background: #e8e8ea;
+    color: #1a1a1f;
     font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     overflow: hidden;
   }
   #c { display: block; width: 100vw; height: 100vh; }
   .panel {
     position: fixed; padding: 14px 16px; pointer-events: none;
-    text-shadow: 0 1px 3px #000;
+    /* A white halo instead of a black one, so text stays legible where it
+       crosses a dark bench as well as where it crosses a white wall. */
+    text-shadow: 0 1px 4px #e8e8ea, 0 0 12px #e8e8ea;
   }
   #title { top: 0; left: 0; }
   #title h1 { font-size: 15px; font-weight: 600; letter-spacing: .14em; }
-  #title .sub { color: #6e6e74; font-size: 11px; margin-top: 3px; }
-  #readout { top: 62px; left: 0; text-align: left; font-size: 11px; color: #8a8a90; }
+  #title .sub { color: #6b6b73; font-size: 11px; margin-top: 3px; }
+  #readout { top: 62px; left: 0; text-align: left; font-size: 11px; color: #4a4a52; }
   #readout .row { display: flex; gap: 10px; justify-content: flex-start; width: 150px; }
-  #readout .k { color: #5c5c62; }
-  #footer { bottom: 0; left: 0; color: #5c5c62; font-size: 10.5px; max-width: 46ch; }
-  #footer b { color: #8a8a90; font-weight: 500; }
-  #hint { bottom: 0; right: 0; color: #4a4a50; font-size: 10.5px; }
+  #readout .k { color: #74747c; }
+  #footer { bottom: 0; left: 0; color: #6b6b73; font-size: 10.5px; max-width: 46ch; }
+  #footer b { color: #26262c; font-weight: 600; }
+  #hint { bottom: 0; right: 0; color: #7a7a82; font-size: 10.5px; }
   #traces {
     position: fixed; left: 14px; bottom: 74px; pointer-events: none;
   }
@@ -35,18 +39,20 @@
     pointer-events: none;
   }
   #brains .blab {
-    font-size: 9.5px; color: #5c5c62; letter-spacing: .04em; margin-bottom: 2px;
+    font-size: 9.5px; color: #6b6b73; letter-spacing: .04em; margin-bottom: 2px;
   }
+  /* The tiles stay dark. They are instrument readouts, the activity in them
+     is drawn as light, and inverting those would mean redrawing every point. */
   #brains canvas {
-    display: block; background: #0e0e12; border: 1px solid #1e1e26;
+    display: block; background: #0e0e12; border: 1px solid #c8c9ce;
   }
   #traces .t { margin-bottom: 7px; }
   #traces .lab {
-    font-size: 9.5px; color: #5c5c62; letter-spacing: .04em;
+    font-size: 9.5px; color: #6b6b73; letter-spacing: .04em;
     display: flex; justify-content: space-between; width: 190px;
     margin-bottom: 1px;
   }
-  #traces canvas { display: block; background: #101014; border-left: 1px solid #23232a; }
+  #traces canvas { display: block; background: #101014; border-left: 1px solid #c8c9ce; }
 
   /* The operator's own state. Placed apart from the chamber readouts,
      because it is the one thing in the scene that is not about a chamber. */
@@ -54,18 +60,18 @@
     position: fixed; left: 14px; top: 190px; pointer-events: none; width: 200px;
   }
   #drive .dlab {
-    font-size: 9.5px; color: #5c5c62; letter-spacing: .06em;
+    font-size: 9.5px; color: #6b6b73; letter-spacing: .06em;
     display: flex; justify-content: space-between; margin-bottom: 3px;
   }
   #drive .bar {
-    height: 7px; background: #141419; border: 1px solid #22222a;
+    height: 7px; background: #1a1a20; border: 1px solid #c8c9ce;
     margin-bottom: 9px; position: relative; overflow: hidden;
   }
   #drive .fill {
     position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
   }
   #drive .cap {
-    font-size: 9.5px; color: #4a4a50; letter-spacing: .04em;
+    font-size: 9.5px; color: #6b6b73; letter-spacing: .04em;
     margin: -4px 0 10px 0; line-height: 1.45;
   }
 </style>
@@ -140,11 +146,18 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+// Lower exposure for the white room. At 1.12 the walls clipped to flat white
+// and took the corners of the room with them; 0.92 keeps them just under,
+// so the room still has shading and the emissives have somewhere to go above
+// it.
+renderer.toneMappingExposure = 0.92;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#0b0b0d');
-scene.fog = new THREE.Fog('#0b0b0d', 16, 40);
+// Background and fog take the wall colour, not the old near-black. Fog that
+// does not match the surface it fades into leaves a visible seam where the
+// room ends, and the far wall is inside the fog range at this room size.
+scene.background = new THREE.Color('#e8e8ea');
+scene.fog = new THREE.Fog('#e4e4e7', 22, 52);
 
 const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100);
 camera.position.set(0, 3.4, 11.5);
@@ -157,7 +170,14 @@ controls.minDistance = 4;
 controls.maxDistance = 22;
 controls.maxPolarAngle = Math.PI * 0.52;
 
-scene.add(new THREE.HemisphereLight('#93a6c8', '#1b1b22', 1.15));
+// Rebalanced for a white room.
+//
+// The rig was lit for near-black walls, where the ambient had to do most of
+// the work because nothing bounced. White walls bounce a great deal, so the
+// same values wash the scene out and flatten the equipment into the
+// background. Ambient comes down and the ground colour becomes the floor's
+// rather than a dark void, which is what a real room would return.
+scene.add(new THREE.HemisphereLight('#f2f4f8', '#c8c9cd', 0.85));
 const key = new THREE.DirectionalLight('#ffffff', 1.5);
 key.position.set(4, 9, 6);
 key.castShadow = true;
@@ -187,7 +207,10 @@ key.shadow.camera.near = 0.5; key.shadow.camera.far = 22;
 key.shadow.bias = -0.0004;
 key.shadow.normalBias = 0.022;
 scene.add(key);
-const fill = new THREE.DirectionalLight('#8fa8d0', 0.55);
+// Fill drops hard: in a white room the walls are the fill. Keeping it at
+// 0.55 left the dark equipment lit from both sides with no shadow side at
+// all, which is what makes a render look flat.
+const fill = new THREE.DirectionalLight('#dfe6f2', 0.22);
 fill.position.set(-6, 3, -4);
 scene.add(fill);
 
@@ -222,23 +245,42 @@ for (let i = 0; i < 5; i++) {
 // Floor, so the chambers sit on something rather than float.
 // A room rather than an infinite plane. The piece is about confinement, and a
 // floor fading into fog reads as open space.
+// A WHITE room. The equipment is dark, so the room should not be.
+//
+// Everything used to be near black on near black, which meant the benches
+// and the flies had nothing to sit against and the whole frame read as
+// objects floating in a void. A white room puts the dark equipment in relief,
+// reads immediately as a laboratory rather than a stage, and gives the heated
+// pins and the LEDs something to be bright against: an emissive at full
+// strength is far more convincing next to a lit wall than next to blackness,
+// where it has nothing to beat.
+//
+// Not pure white. #e8e8ea under ACES tone mapping sits just below clipping,
+// so the walls keep their shading and the corners of the room stay readable
+// instead of flattening into one white field.
 const ROOM_W = 26, ROOM_D = 20, ROOM_H = 11;
 const wallMat = new THREE.MeshStandardMaterial({
-  color: '#16161b', roughness: 0.94, metalness: 0, side: THREE.BackSide,
+  color: '#e8e8ea', roughness: 0.96, metalness: 0, side: THREE.BackSide,
 });
 const room = new THREE.Mesh(
   new THREE.BoxGeometry(ROOM_W, ROOM_H, ROOM_D), wallMat
 );
 room.position.y = ROOM_H / 2 - 1.05;
-// No receiveShadow. The material is BackSide, so its faces point away from
-// every light in the scene and can only ever be fully unlit; asking for
-// shadows on them costs a map lookup per fragment and changes nothing.
-room.receiveShadow = false;
+// Now worth receiving. On a dark BackSide wall a shadow could not be seen and
+// the lookup was wasted; on a white one the shadow the benches throw up the
+// back wall is a large part of what makes the room feel lit rather than
+// painted.
+room.receiveShadow = true;
 scene.add(room);
 
 const floor = new THREE.Mesh(
   new THREE.PlaneGeometry(ROOM_W, ROOM_D),
-  new THREE.MeshStandardMaterial({ color: '#1b1b21', roughness: 0.7, metalness: 0.05 })
+  // Slightly darker and a little glossier than the walls. A floor that
+  // exactly matches its walls loses the corner, and a touch of specular is
+  // what makes it read as sealed lab flooring rather than paper.
+  new THREE.MeshStandardMaterial({
+    color: '#d6d7da', roughness: 0.62, metalness: 0.04,
+  })
 );
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -1.049;
@@ -893,7 +935,7 @@ for (let i = 0; i < CH; i++) {
 const opRow = document.createElement('div');
 opRow.className = 'row';
 opRow.style.marginTop = '6px';
-opRow.innerHTML = `<span class="k">operator</span><span class="v" style="color:#5590d8">at the dial</span>`;
+opRow.innerHTML = `<span class="k">operator</span><span class="v" style="color:#3a6ea8">at the buttons</span>`;
 rows.appendChild(opRow);
 
 const timeRow = document.createElement('div');
@@ -989,7 +1031,7 @@ for (let i = 0; i < 6; i++) {
   const lab = document.createElement('div');
   lab.className = 'blab';
   lab.textContent = isOp ? 'operator' : 'chamber ' + i;
-  if (isOp) lab.style.color = '#6d9bd4';
+  if (isOp) lab.style.color = '#3a6ea8';   // darker: this label is on the white page
   const cv = document.createElement('canvas');
   cv.width = BRAIN_W * 2; cv.height = BRAIN_H * 2;
   cv.style.width = BRAIN_W + 'px'; cv.style.height = BRAIN_H + 'px';
