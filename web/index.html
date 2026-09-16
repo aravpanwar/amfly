@@ -511,6 +511,48 @@ function makeChamber(x, isOperator) {
   pinHot.castShadow = true;
   g.add(pinHot);
 
+  // A fine electrode into the head.
+  //
+  // The cable used to run to the base of the mounting pin, so nothing in the
+  // scene actually touched the brain: the current appeared to arrive at the
+  // furniture. This is the part that does the stimulating, and it has to be
+  // hair-thin, because the electrode is placed IN the brain and a cable that
+  // width through a fly's head would destroy the thing it is recording from.
+  //
+  // 0.0035 radius, roughly half the mounting pin and about 1:180 against the
+  // body. It is the thinnest object in the scene by some way and sits just
+  // above the normalBias of 0.005 in diameter terms, which is exactly why
+  // that bias had to come down.
+  const probe = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0035, 0.0018, 0.46, 8),
+    new THREE.MeshStandardMaterial({
+      color: '#c8ccd2', roughness: 0.22, metalness: 0.96,
+      emissive: new THREE.Color('#ff3b10'), emissiveIntensity: 0,
+    })
+  );
+  // Angled down into the head from behind, the way a recording electrode is
+  // actually driven in, rather than standing vertically like a second pin.
+  probe.position.set(0, MOUNT_Y + 0.30, -0.10);
+  probe.rotation.x = 0.55;
+  // Does not cast. At 0.0070 across it is 1.4 texels in the shadow map, below
+  // the point where a shadow holds together, and a dashed line under a solid
+  // object reads as a fault. The connector above it does cast, so the assembly
+  // is still grounded.
+  probe.castShadow = false;
+  g.add(probe);
+
+  // The connector the cable lands on, so the wire terminates on hardware
+  // rather than vanishing into the animal.
+  const probeCap = new THREE.Mesh(
+    new THREE.SphereGeometry(0.018, 12, 10),
+    new THREE.MeshStandardMaterial({
+      color: '#15181d', roughness: 0.4, metalness: 0.7,
+    })
+  );
+  probeCap.position.set(0, MOUNT_Y + 0.49, -0.22);
+  probeCap.castShadow = true;
+  g.add(probeCap);
+
   // A small head on the pin, so it reads as a pin and not a rod.
   const pinHead = new THREE.Mesh(
     new THREE.SphereGeometry(0.019, 12, 10),
@@ -668,7 +710,7 @@ function makeChamber(x, isOperator) {
   g.position.y = BENCH_TOP + 0.79;
   scene.add(g);
   return { group: g, core, glass, lamp, edges, isOperator,
-           pinHot, pinShaft, pinHead, base,
+           pinHot, pinShaft, pinHead, base, probe, probeCap,
            vCtx, vTex, screen, _vShown: -1 };
 }
 
@@ -949,12 +991,26 @@ for (let i = 0; i < CH; i++) {
     new THREE.Vector3(leds[i].lx, PANEL_Y + 0.05, PANEL_Z + 0.28),
     edge, 0.42, BENCH_TOP + 0.03
   );
-  // Carry on across the plate. A point just inside the edge keeps the curve
-  // flat once it has landed rather than letting it arc up to the pin.
+  // Carry on across the plate, then RISE to the electrode connector.
+  //
+  // The cable used to stop at the foot of the mounting pin, so the current
+  // arrived at the furniture and nothing in the scene touched the brain. It
+  // now lands on the connector at the top of the probe, which is the thing
+  // doing the stimulating, and the chain reads end to end: panel, bench,
+  // plate, up the body, into the head.
   const inset = edge.clone().lerp(
     new THREE.Vector3(pinPos.x, plateTop.y, pinPos.z), 0.45
   );
-  pts.push(inset, new THREE.Vector3(pinPos.x, plateTop.y, pinPos.z));
+  pts.push(inset);
+
+  const capPos = new THREE.Vector3();
+  c.probeCap.getWorldPosition(capPos);
+  // A point short of the connector and below it, so the last stretch curves up
+  // to meet the probe instead of arriving horizontally through the body.
+  pts.push(new THREE.Vector3(
+    capPos.x, plateTop.y + 0.12, (plateTop.z + capPos.z) / 2 + 0.18
+  ));
+  pts.push(capPos);
   chamberWires.push([wire(pts, '#333842')]);
 }
 
@@ -1480,6 +1536,14 @@ function apply(f) {
     // it. Rising sharply at first and then flattening keeps a low heat still
     // clearly visible, and means the difference between 80% and 100% still
     // reads instead of both saturating to white.
+    // The probe carries the current into the head, so it lights first and
+    // hardest. It is the thing actually delivering the stimulation; the
+    // mounting pin only holds the animal still.
+    c.probe.material.emissiveIntensity = 0.2 + Math.pow(h, 0.6) * 7.0;
+    c.probe.material.emissive.setRGB(
+      0.6 + h * 0.4, 0.08 + h * h * 0.5, 0.03 + h * h * h * 0.4
+    );
+
     // The pin now carries the whole signal, since the body no longer does.
     //
     // Colour shifts with temperature the way heated steel does: dull red at
