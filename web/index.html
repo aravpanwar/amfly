@@ -542,17 +542,26 @@ function makeChamber(x, isOperator) {
   // Built for every chamber at first, which put a probe in five heads that are
   // not wired to anything and made the one that matters unremarkable.
   const probe = isOperator ? new THREE.Mesh(
-    new THREE.CylinderGeometry(0.0035, 0.0018, 0.46, 8),
+    new THREE.CylinderGeometry(0.0035, 0.0018, 0.60, 8),
     new THREE.MeshStandardMaterial({
       color: '#c8ccd2', roughness: 0.22, metalness: 0.96,
       emissive: new THREE.Color('#ff3b10'), emissiveIntensity: 0,
     })
   ) : null;
-  // Angled down into the head from behind, the way a recording electrode is
-  // actually driven in, rather than standing vertically like a second pin.
+  // Upright, and moved off the pin's line.
+  //
+  // It leaned at 0.55 rad, which put its connector at world y=0.551 against a
+  // pin head at 0.541: ten thousandths apart and stacked, so the cable read as
+  // landing on the mounting pin rather than on the electrode. The lean was
+  // meant to look like a driven-in recording electrode and instead looked like
+  // a bent pin.
+  //
+  // It now stands vertical and sits 0.17 behind the pin in z, so the two are
+  // separate objects doing separate jobs: the pin holds the body, the probe
+  // enters the head.
   if (probe) {
-  probe.position.set(0, MOUNT_Y + 0.30, -0.10);
-  probe.rotation.x = 0.55;
+  probe.position.set(0, MOUNT_Y + 0.19, -0.17);
+  probe.rotation.x = 0;
   // Does not cast. At 0.0070 across it is 1.4 texels in the shadow map, below
   // the point where a shadow holds together, and a dashed line under a solid
   // object reads as a fault. The connector above it does cast, so the assembly
@@ -570,7 +579,7 @@ function makeChamber(x, isOperator) {
     })
   ) : null;
   if (probeCap) {
-    probeCap.position.set(0, MOUNT_Y + 0.49, -0.22);
+    probeCap.position.set(0, MOUNT_Y + 0.49, -0.17);
     probeCap.castShadow = true;
     g.add(probeCap);
   }
