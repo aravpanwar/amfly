@@ -201,12 +201,27 @@ floor.position.y = -1.049;
 floor.receiveShadow = true;
 scene.add(floor);
 
+// One source of truth for the working surface.
+//
+// Everything that stands on the bench derives its height from this rather
+// than carrying its own constant. Three separate hardcoded values had drifted
+// apart: the platforms floated 0.560 above the bench, the panel 0.430, and
+// the wires ran through all of it because nothing agreed on where the surface
+// was.
+// The bench stands ON the floor. It used to be centred at -1.30 with a height
+// of 0.5, so its underside sat at -1.55 against a floor at -1.049: half a
+// unit of it was buried, and the legs of the thing everything else rests on
+// were inside the ground.
+const FLOOR_Y = -1.049;
+const BENCH_H = 0.5;
+const BENCH_TOP = FLOOR_Y + BENCH_H;
+
 // A bench the cages stand on, so they are equipment on a surface.
 const bench = new THREE.Mesh(
   new THREE.BoxGeometry(5 * 1.72 + 1.4, 0.5, 2.6),
   new THREE.MeshStandardMaterial({ color: '#232830', roughness: 0.55, metalness: 0.35 })
 );
-bench.position.set(0, -1.3, 0);
+bench.position.set(0, BENCH_TOP - BENCH_H / 2, 0);
 bench.castShadow = true; bench.receiveShadow = true;
 scene.add(bench);
 
@@ -214,7 +229,7 @@ const opBench = new THREE.Mesh(
   new THREE.BoxGeometry(2.6, 0.5, 2.6),
   new THREE.MeshStandardMaterial({ color: '#232830', roughness: 0.55, metalness: 0.35 })
 );
-opBench.position.set(0, -1.3, -3.6);
+opBench.position.set(0, BENCH_TOP - BENCH_H / 2, -3.6);
 opBench.castShadow = true; opBench.receiveShadow = true;
 scene.add(opBench);
 
@@ -270,7 +285,12 @@ function makeChamber(x, isOperator) {
   core.add(rig);
   const skin = new THREE.MeshStandardMaterial({
     color: '#2a2a30',
-    emissive: new THREE.Color(isOperator ? '#3d6ea8' : '#1a1a1e'),
+    // The operator is the same fly as the five, so it is the same colour.
+    // It used to glow blue, which made it the special one in the room, and
+    // the piece is that it is not: it is mounted on the same pin, wired into
+    // the same machine, and burned by the same thermoreceptors. Its state is
+    // shown by the panel and by its own pin, not by tinting the animal.
+    emissive: new THREE.Color('#1a1a1e'),
     emissiveIntensity: 1, roughness: 0.55, metalness: 0.12,
   });
   // Plain alpha, not transmission. MeshPhysicalMaterial with transmission
@@ -380,7 +400,7 @@ function makeChamber(x, isOperator) {
   const pinHot = new THREE.Mesh(
     new THREE.CylinderGeometry(0.019, 0.019, 0.42, 12),
     new THREE.MeshStandardMaterial({
-      color: '#4a4036', emissive: isOperator ? '#5590d8' : '#ff3b10',
+      color: '#4a4036', emissive: new THREE.Color('#ff3b10'),
       emissiveIntensity: 0, roughness: 0.5, metalness: 0.6,
     })
   );
@@ -399,14 +419,14 @@ function makeChamber(x, isOperator) {
   g.add(pinHead);
 
   // A light inside the box, so heat spills onto the neighbours.
-  const lamp = new THREE.PointLight(isOperator ? '#5590d8' : '#ff5a33', 0, 5.5, 2);
+  const lamp = new THREE.PointLight('#ff5a33', 0, 5.5, 2);
   g.add(lamp);
 
   // Floor pad: reads the level from across the room, even at a glance.
   const pad = new THREE.Mesh(
     new THREE.CircleGeometry(0.95, 48),
     new THREE.MeshBasicMaterial({
-      color: isOperator ? '#2a4a72' : '#3a1410',
+      color: '#3a1410',
       transparent: true, opacity: 0.55,
     })
   );
@@ -426,7 +446,11 @@ function makeChamber(x, isOperator) {
   base.castShadow = true; base.receiveShadow = true;
   g.add(base);
 
-  g.position.y = 0.3;   // stand on the bench
+  // Stand ON the bench, not above it. The base plate sits at local -0.79, so
+  // the group rises by exactly that much for the plate to meet the surface.
+  // This was 0.3, which left every platform floating 0.56 clear and let the
+  // wires pass through the gap.
+  g.position.y = BENCH_TOP + 0.79;
   scene.add(g);
   return { group: g, core, glass, lamp, pad, edges, isOperator,
            pinHot, pinShaft, pinHead };
@@ -437,7 +461,7 @@ for (let i = 0; i < CH; i++) {
 }
 // The operator sits outside the row, behind it. Not above, not on a throne.
 const operator = makeChamber(0, true);
-operator.group.position.set(0, 0.3, -3.6);
+operator.group.position.set(0, BENCH_TOP + 0.79, -3.6);
 operator.group.scale.setScalar(0.92);
 // Turned towards the five. It still receives nothing from them; facing the
 // work is not the same as seeing it.
@@ -478,7 +502,9 @@ operator.group.add(operator.punishLamp);
 // choice: measured across all 30,000 steps of the recorded run, exactly two
 // buttons are held at every single step.
 const PANEL_Z = -1.8;
-const PANEL_Y = -0.62;
+// Chassis is 0.16 tall and centred on the group, so the group sits half that
+// above the surface for the panel to rest on the bench rather than hover.
+const PANEL_Y = BENCH_TOP + 0.08;
 const leds = [];
 
 const panelGroup = new THREE.Group();
@@ -535,6 +561,10 @@ for (let i = 0; i < CH; i++) {
 function wire(from, to, sag, colour) {
   const mid = from.clone().add(to).multiplyScalar(0.5);
   mid.y -= sag;
+  // A cable lies ON the bench, it does not pass through it. The sag used to
+  // be applied blind and every wire dipped under the surface and came back
+  // out, which read as the wires phasing through the furniture.
+  mid.y = Math.max(mid.y, BENCH_TOP + 0.03);
   const curve = new THREE.CatmullRomCurve3([from, mid, to]);
   const mesh = new THREE.Mesh(
     new THREE.TubeGeometry(curve, 28, 0.016, 7, false),
@@ -563,20 +593,28 @@ const opHead = new THREE.Vector3();
 }
 const headWire = wire(
   opHead.clone(),
-  new THREE.Vector3(0, PANEL_Y + 0.02, PANEL_Z - 0.3),
+  new THREE.Vector3(0, PANEL_Y + 0.05, PANEL_Z - 0.28),
   0.34, '#3a3f49'
 );
 
 // Five wires out to the pins, one per chamber, in chamber order.
+//
+// Each one terminates at the BASE OF THE PIN, taken from the pin's own world
+// position rather than an offset from the group. The previous version used
+// `group.y - 0.55` against a pin whose base is at local -0.79, so every wire
+// stopped 0.24 short and hung in the air near the thing it was supposed to
+// be connected to.
 const chamberWires = [];
 for (let i = 0; i < CH; i++) {
-  const target = new THREE.Vector3();
-  chambers[i].group.getWorldPosition(target);
+  const base = new THREE.Vector3();
+  chambers[i].pinShaft.getWorldPosition(base);
+  // getWorldPosition gives the shaft's centre; its base is half its length
+  // below that, which is the bench surface.
+  const end = new THREE.Vector3(base.x, BENCH_TOP + 0.05, base.z);
   chamberWires.push(
     wire(
-      new THREE.Vector3(leds[i].lx, PANEL_Y + 0.02, PANEL_Z + 0.3),
-      new THREE.Vector3(target.x, target.y - 0.55, target.z - 0.1),
-      0.42, '#333842'
+      new THREE.Vector3(leds[i].lx, PANEL_Y + 0.05, PANEL_Z + 0.28),
+      end, 0.42, '#333842'
     )
   );
 }
@@ -962,7 +1000,9 @@ function apply(f) {
   );
 
   const opRate = rates[DATA.meta.operator];
-  operator.core.material.emissiveIntensity = 0.5 + opRate * 2.2;
+  // Lit by the room and by its own pin, not from within. The firing rate
+  // still drives the body scale below, which is the honest readout of it.
+  operator.core.material.emissiveIntensity = 0.05 + opRate * 0.12;
   operator.core.scale.setScalar(operator.core.userData.baseScale * (1 + opRate * 0.045));
   for (let k = 0; k < operator.core.userData.legs.length; k++) {
     const L = operator.core.userData.legs[k];
