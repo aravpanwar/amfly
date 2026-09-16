@@ -480,7 +480,12 @@ for (let i = 0; i < CH; i++) {
   const bg = new THREE.Group();
   // Spread across the operator's front, narrower than the chamber row so the
   // whole console reads as one object within reach.
-  bg.position.set((i - (CH - 1) / 2) * 0.46, BTN_Y, 0.92);
+  // Local -z, NOT +z. The operator is rotated by PI to face the chambers, so
+  // its local +z points away from the default camera at z=+11.5: buttons put
+  // there sit behind the fly and are invisible from the only angle most
+  // viewers will ever use. The console belongs between the viewer and the
+  // operator, which is also where a console belongs.
+  bg.position.set((i - (CH - 1) / 2) * 0.46, BTN_Y, -0.92);
   operator.group.add(bg);
 
   // The housing the button sits in, so a raised button has something to be
