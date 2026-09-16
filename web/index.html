@@ -422,17 +422,14 @@ function makeChamber(x, isOperator) {
   const lamp = new THREE.PointLight('#ff5a33', 0, 5.5, 2);
   g.add(lamp);
 
-  // Floor pad: reads the level from across the room, even at a glance.
-  const pad = new THREE.Mesh(
-    new THREE.CircleGeometry(0.95, 48),
-    new THREE.MeshBasicMaterial({
-      color: '#3a1410',
-      transparent: true, opacity: 0.55,
-    })
-  );
-  pad.rotation.x = -Math.PI / 2;
-  pad.position.y = -0.74;
-  g.add(pad);
+  // No floor pad.
+  //
+  // A heat-scaled disc used to sit under each fly. It was the last readout
+  // added before the pin existed, and once the pin, the LED and the cable all
+  // carried the same signal it was a fourth copy of it. It also cut through
+  // the cables: it sat at world -0.499 against a cable lying at -0.486, and
+  // it grew to radius 1.04 against a plate only 0.81 across, so it overhung
+  // the plate by up to 0.23 and swept through the wires as it scaled.
 
   // A base plate under each cage: the cage is mounted equipment, not a
   // floating box.
@@ -454,7 +451,7 @@ function makeChamber(x, isOperator) {
   // wires pass through the gap.
   g.position.y = BENCH_TOP + 0.79;
   scene.add(g);
-  return { group: g, core, glass, lamp, pad, edges, isOperator,
+  return { group: g, core, glass, lamp, edges, isOperator,
            pinHot, pinShaft, pinHead, base };
 }
 
@@ -912,8 +909,6 @@ function apply(f) {
     c.pinShaft.material.emissive.setRGB(h * 0.5, h * h * 0.16, 0);
 
     c.lamp.intensity = h * 1.9;
-    c.pad.material.opacity = 0.12 + h * 0.34;
-    c.pad.scale.setScalar(0.8 + h * 0.3);
 
     labels[i].textContent = Math.round(h * 100) + '%';
     labels[i].style.color = h > 0.5 ? '#ff7a55' : (h > 0.2 ? '#c9a227' : '#6e6e74');
