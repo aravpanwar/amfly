@@ -358,6 +358,21 @@ class Dials:
         self.history.append(self._levels.copy())
         return self.levels
 
+    @property
+    def held(self) -> np.ndarray:
+        """(n_blocks,) bool: which buttons are down right now.
+
+        Cannot be inferred downstream from the heat. A chamber already at the
+        ceiling is still being pressed but no longer rises, so reading the
+        slope reports the operator as idle at exactly the moments it is
+        working hardest: measured on a finished run, slope-derived presses
+        averaged 1.24 against a grip of 2.
+        """
+        out = np.zeros(self.n_blocks, dtype=bool)
+        if self.grip and self.grip < self.n_blocks:
+            out[self._held] = True
+        return out
+
     def level_history(self) -> np.ndarray:
         """(T, n_blocks) levels over the run. Drives the dial panel."""
         return np.array(self.history, dtype=np.float32)

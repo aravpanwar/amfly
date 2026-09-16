@@ -40,6 +40,8 @@ class Recorder:
     # premise of the piece and it used to survive only as a mean in
     # provenance, so nothing downstream could show it.
     drive: list = field(default_factory=list, init=False)
+    # Which buttons are down, as a bitmask. One byte per step.
+    held: list = field(default_factory=list, init=False)
     _subset_events: list = field(default_factory=list, init=False)
 
     @classmethod
@@ -67,6 +69,7 @@ class Recorder:
         hamming: np.ndarray | None = None,
         reward: float | None = None,
         punish: float | None = None,
+        held: np.ndarray | None = None,
     ) -> None:
         self.rates.append(spikes.sum(axis=0).astype(np.int32))
         if hamming is not None:
@@ -75,6 +78,17 @@ class Recorder:
         self.dial.append(dial_position)
         if reward is not None:
             self.drive.append((np.float32(reward), np.float32(punish or 0.0)))
+        if held is not None:
+            # Chamber i is bit i. Written explicitly rather than with
+            # packbits, which pads to a full byte and put the five chambers in
+            # the HIGH bits: a mask of 24 then decoded as chambers 3 and 4
+            # when the operator was in fact holding 0 and 1, silently
+            # mirroring the console and misnaming every press.
+            m = 0
+            for i, on in enumerate(np.asarray(held, dtype=bool)):
+                if on:
+                    m |= 1 << i
+            self.held.append(m)
 
         sub = spikes[self.subset]
         rows, cols = np.nonzero(sub)
@@ -111,6 +125,9 @@ class Recorder:
             drive=np.array(self.drive, dtype=np.float32)
             if self.drive
             else np.zeros((0, 2), dtype=np.float32),
+            held=np.array(self.held, dtype=np.uint8)
+            if self.held
+            else np.zeros(0, dtype=np.uint8),
             subset=self.subset.astype(np.int32),
             events_step=ev[0],
             events_neuron=ev[1],

@@ -458,6 +458,55 @@ operator.punishLamp = new THREE.PointLight('#ff4a22', 0, 2.6, 2.2);
 operator.punishLamp.position.set(0, -0.62, -0.34);
 operator.group.add(operator.punishLamp);
 
+// ------------------------------------------------------------- the buttons
+//
+// Five of them, in front of the operator, one per chamber and in the same
+// left-to-right order so a pressed button and the pin it heats line up on
+// screen.
+//
+// Honest about what this is. The fly is not reaching for anything: the real
+// mechanism is five blocks of descending neurons, and a block being loud is
+// what holds a button down. The buttons are the readable form of that, not a
+// claim about limbs. What IS real is which two are down and when, recorded
+// per step from the simulation.
+//
+// A button cannot be inferred from the heat downstream, which is why it is
+// recorded: a chamber already at the ceiling is still held but no longer
+// rises, so reading the slope shows the operator idle exactly when it is
+// working hardest.
+const buttons = [];
+const BTN_Y = -0.52;
+for (let i = 0; i < CH; i++) {
+  const bg = new THREE.Group();
+  // Spread across the operator's front, narrower than the chamber row so the
+  // whole console reads as one object within reach.
+  bg.position.set((i - (CH - 1) / 2) * 0.46, BTN_Y, 0.92);
+  operator.group.add(bg);
+
+  // The housing the button sits in, so a raised button has something to be
+  // raised out of.
+  const housing = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15, 0.17, 0.07, 20),
+    new THREE.MeshStandardMaterial({
+      color: '#23262d', roughness: 0.55, metalness: 0.6,
+    })
+  );
+  housing.receiveShadow = true;
+  bg.add(housing);
+
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.115, 0.12, 0.085, 20),
+    new THREE.MeshStandardMaterial({
+      color: '#4a4f59', roughness: 0.42, metalness: 0.45,
+      emissive: new THREE.Color('#ff3b10'), emissiveIntensity: 0,
+    })
+  );
+  cap.position.y = 0.055;
+  cap.castShadow = true;
+  bg.add(cap);
+  buttons.push({ cap, rest: 0.055, group: bg });
+}
+
 // Panel handles, looked up once. Missing nodes leave UI.rf undefined and the
 // frame loop skips the panel rather than throwing every frame.
 const UI = {
@@ -726,6 +775,27 @@ function apply(f) {
 
     labels[i].textContent = Math.round(h * 100) + '%';
     labels[i].style.color = h > 0.5 ? '#ff7a55' : (h > 0.2 ? '#c9a227' : '#6e6e74');
+  }
+
+  // The buttons. `held` is a bitmask, one byte per frame, recorded from the
+  // simulation rather than derived here.
+  //
+  // Eased rather than snapped. At 30fps a button that jumps between two
+  // positions reads as a flicker, and the switching is often fast enough that
+  // several would flicker at once. Easing makes a press look like a press and
+  // also makes the rushing legible: buttons caught halfway are the operator
+  // changing its mind.
+  const heldMask = DATA.held ? DATA.held[f] : 0;
+  for (let i = 0; i < CH; i++) {
+    const down = (heldMask >> i) & 1;
+    const b = buttons[i];
+    const goal = down ? b.rest - 0.052 : b.rest;
+    b.cap.position.y += (goal - b.cap.position.y) * 0.34;
+    // A held button glows with the heat it is causing, so the eye can follow
+    // the chain from button to pin to fly without being told.
+    const want = down ? 0.35 + heat[i] * 2.4 : 0;
+    const m = b.cap.material;
+    m.emissiveIntensity += (want - m.emissiveIntensity) * 0.3;
   }
 
   // ------------------------------------------------- the operator's own state

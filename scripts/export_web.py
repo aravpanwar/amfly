@@ -81,6 +81,19 @@ def main() -> int:
         ).tolist(),
     }
 
+    # Which buttons were down, as a bitmask per frame.
+    #
+    # Sampled at the frame index rather than reduced over the frame's span.
+    # A button held for part of a frame is either shown down or not, and
+    # picking the instant keeps it honest: any averaging here would invent a
+    # half-pressed state the simulation never had.
+    held = data.get("held")
+    if held is not None and len(held):
+        payload["held"] = held[idx].astype(int).tolist()
+        n_down = [bin(int(v)).count("1") for v in held]
+        log.info("buttons: mean %.2f held per step, max %d",
+                 sum(n_down) / len(n_down), max(n_down))
+
     # The operator's own state: what it is being paid and what it is being
     # charged. Normalised independently because the two have different natural
     # ranges, reward saturating near 1 while punishment grows without bound as
