@@ -15,6 +15,10 @@ out/
 *.mp4
 *.gif
 
+# README media is committed. The rules above are for generated figures and
+# screen recordings, which are reproducible from a run; these four are not.
+!docs/media/*.gif
+
 # Third-party reference code, fetched for study. Not ours to redistribute.
 ref/
 

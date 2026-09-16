@@ -1,4 +1,33 @@
-# What "heat" actually is in this piece
+# Superseded: the piece uses an electrode, not heat
+
+**This document described the thermal channel, which was replaced on
+2026-09-16 by electrical stimulation. It is kept because the reasoning still
+holds and because one of its central claims turned out to be wrong when
+measured.** See `docs/electrode-plan.md` for what runs now.
+
+Two things changed.
+
+**Heat implied cooking, which the model cannot represent.** That objection is
+set out below and it is what prompted the switch. What the simulation
+literally does is inject millivolts of depolarising current, so an electrode
+is the accurate description and millivolts the real unit.
+
+**The claim that warmth never drives the escape pathway is false.** This
+document says warmth-level input "simply does not drive DNp01 hard enough to
+fire". Measured under identical conditions, the thermal channel gives 42
+DNp01 spikes and the electrode 45, an identical 0.0044% share of all spikes.
+Warmth was ringing the alarm bell at a low rate the whole time.
+
+What IS true, and measured: driving the escape command neurons directly
+produces no motor change at any amplitude, 3,713 motor spikes at 20 mV against
+3,686 at 400 mV, and against a realistic baseline it is 0.92x. The escape
+circuit is present, reachable, and pulling it does nothing. The flies convulse
+because 708 VNC motor neurons are driven directly instead, which is an
+authored intervention and is declared as one.
+
+---
+
+# What "heat" was in this piece
 
 A question worth answering precisely, because the README depends on it and
 because it is the kind of thing that gets a project taken apart in comments.
