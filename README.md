@@ -155,17 +155,6 @@ is done to them.
 - 18,530 of 24,000 rendered brain points carry per-neuron activity; the rest
   are structure
 
-## Negative results
-
-`docs/negative-results.md` carries the ones that cost the most: a fixed
-decision cadence always reads as a metronome, more stimulation saturates
-rather than intensifies, flies must differ from step 0 or they never separate,
-and phase 0 made one fly permanently special.
-
-One more belongs here: an earlier version of `docs/what-heat-is.md` claimed
-warmth never drives DNp01. Measured, it does, at exactly the same rate the
-electrode does.
-
 ## Licence
 
 MIT. MaleCNS v1.0 is CC BY 4.0, so credit Janelia FlyEM and Google Research.
