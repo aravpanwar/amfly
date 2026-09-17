@@ -88,7 +88,7 @@ python scripts/make_figures.py --run runs/mine --out out/mine --stills-only
 python -m pytest tests/ -q -m "not slow"
 ```
 
-## A look around
+## Flies in action
 
 ![a walkthrough of the scene](docs/media/tour.gif)
 
