@@ -104,12 +104,12 @@ Soma coordinates for 141,781 of the neurons come from the public neuPrint API.
 Reward goes to 340 dopaminergic neurons (PAM 316, PPL1 16, PPL2 8). The
 operator's punishment goes through its own 25 TRN_VP thermoreceptors.
 
-## What I made up
+## Simulation parameters
 
 - The electrode sits on DNp01-left. Its pair is 21,114 units away, so only one
   side gets stimulated
-- Two channels at once, the 100% and 50% thresholds, and the 0.40 switch
-  margin are simulation parameters
+- The operator can stimulate two targets at once
+- The 100% reward and 50% neglect thresholds, and the 0.40 switch margin
 - The flies start at different levels. Identical starts make them follow one
   trajectory and never separate
 - The convulsion is current injected straight into 708 motor neurons. The
