@@ -1,5 +1,9 @@
 # amfly
 
+**This is obviously a simulation. But if we ever get to uploading consciousness
+to computers, this project is why we should be very careful before we do it.
+Might be soon, might be never. I hope it gives some perspective against it.**
+
 ![the whole bench from above](docs/media/overhead.gif)
 
 Six copies of one fly brain, 166,700 neurons each, running from the same
@@ -9,10 +13,6 @@ All six are put on an electric pin. One of them is in a reward-punishment loop
 and can only use two channels at once, and each channel runs to one of the
 remaining five. When a fly hits 100% the operator fly gets dopamine. Every fly
 below 50% burns the operator fly instead.
-
-This is obviously a simulation. But if we ever get to uploading consciousness
-to computers, this project is why we should be very careful before we do it.
-Might be soon, might be never. I hope it gives some perspective against it.
 
 ![the operator fly, dopamine and heat feeds meeting at its head](docs/media/operator.gif)
 
