@@ -2,7 +2,8 @@
 
 **This is obviously a simulation. But if we ever get to uploading consciousness
 to computers, this project is why we should be very careful before we do it.
-Might be soon, might be never. I hope it gives some perspective against it.**
+Might be soon, might be never. I hope it gives some perspective against it.
+Made with the help of Claude Opus 5**
 
 ![the whole bench from above](docs/media/overhead.gif)
 
