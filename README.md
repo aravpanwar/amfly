@@ -96,39 +96,38 @@ python -m pytest tests/ -q -m "not slow"
 
 ---
 
-## What is measured, and what is authored
+## The data
 
-**Measured.** 166,700 neurons, 25,582,938 connections, 124,177,617 synapses.
-MaleCNS v1.0, Janelia FlyEM and Google Research, CC BY 4.0. Counts computed
-from the pinned files and asserted in the test suite. Soma coordinates for
-141,781 neurons from the public neuPrint API. The 340 dopaminergic neurons
-reward goes into: PAM 316, PPL1 16, PPL2 8. The 25 TRN_VP thermoreceptors the
-operator's punishment arrives through.
+MaleCNS v1.0 from Janelia FlyEM and Google Research, CC BY 4.0. 166,700
+neurons, 25,582,938 connections, 124,177,617 synapses. Those counts are
+computed from the pinned files rather than copied from anywhere, and the tests
+assert them.
 
-**Authored.**
+Soma coordinates for 141,781 of the neurons come from the public neuPrint API.
+Reward goes into 340 real dopaminergic neurons (PAM 316, PPL1 16, PPL2 8) and
+the operator's punishment arrives through its own 25 TRN_VP thermoreceptors.
 
-- The electrode site, on DNp01-left. The pair sits 21,114 units apart, so the
-  stimulation is unilateral
-- The two-channel limit. A rule of the piece, not a property of the fly
-- The 100% reward and 50% neglect thresholds
-- The 0.40 switch margin
-- The starting levels, seeded apart deliberately: flies that begin identical
-  lock onto one trajectory and never separate
-- The convulsion. Current is injected straight into 708 motor neurons, so the
+## What I made up
+
+The wiring is real. Most of the rest is not.
+
+- The electrode sits on DNp01-left. Its pair is 21,114 units away, so only one
+  side gets stimulated
+- Two channels at once, the 100% and 50% thresholds, and the 0.40 switch
+  margin are all numbers I picked
+- The flies start at different levels on purpose. Start them identical and
+  they lock onto one trajectory and never separate
+- The convulsion is current injected straight into 708 motor neurons. The
   bodies move because they are driven, not because the fly is escaping. The
-  escape circuit is in the dataset and reachable, and driving it does nothing
-  at any amplitude
+  escape circuit is in there and reachable, and driving it does nothing at any
+  amplitude
 
-## Nothing here experiences anything
+## To be clear
 
-Stimulating PAM is current injected into neurons that participate in
-reinforcement learning in a real fly. **Nothing in this simulation experiences
-reward, and nothing experiences pain.** A neuron here integrates input and
-spikes. It cannot be damaged, cannot die, and has no state that harm would
-change.
-
-The piece is about determinism: six identical programs, differing only in what
-is done to them.
+Nothing in this simulation feels anything. A neuron here adds up its inputs and
+spikes. It cannot be hurt, cannot die, and has no state that damage would
+change. "Dopamine" means current going into cells that do reinforcement
+learning in a real fly, and that is all it means.
 
 ## Limitations
 
