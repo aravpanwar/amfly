@@ -114,22 +114,10 @@ operator's punishment arrives through.
 - The 0.40 switch margin
 - The starting levels, seeded apart deliberately: flies that begin identical
   lock onto one trajectory and never separate
-- The convulsion, below
-
-## The convulsion is not an escape reflex
-
-The bodies move because current is injected directly into 708 VNC motor
-neurons. That is authored, and it is not the fly escaping.
-
-The escape circuit **is** in the dataset, DNp01 plus DNp02, 03, 04, 09 and 11,
-and it is reachable from the stimulation site. Driving it produces no motor
-change at any amplitude: 3,713 motor spikes at 20 mV against 3,686 at 400 mV,
-and against a realistic baseline it comes out at **0.92x**, marginally fewer
-than with escape off.
-
-The alarm bell is wired, reachable, and ringing it does nothing. Driving the
-motor stage directly reaches 2.00x at 60 mV, which is what the bodies are
-doing on screen.
+- The convulsion. Current is injected straight into 708 motor neurons, so the
+  bodies move because they are driven, not because the fly is escaping. The
+  escape circuit is in the dataset and reachable, and driving it does nothing
+  at any amplitude
 
 ## Nothing here experiences anything
 
