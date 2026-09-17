@@ -497,3 +497,46 @@ level, 15%, and diverged 47% more than everything else.
 indexing that makes one chamber permanently special, so the apparatus decides
 rather than the operator. Phases are now `(c + 1) * min_period / 6`, so no
 chamber sits at 0. Spread falls from **1.47x to 1.01x**.
+
+## 2026-09-17: the overnight sweep, and two things it settled
+
+27 of 36 combinations, varying switch margin, press rate, grip and debt bias.
+
+### Neglect is load bearing, and removing it collapses the piece
+
+Every run with `debt-bias 0.0` failed, and every run with `1.1` worked. There
+is no overlap between the two groups at all.
+
+| debt-bias | motion | braid | min_reach | good |
+|---|---|---|---|---|
+| 1.1 | 1.00 | 0.00 | 0.16 to 0.44 | 2.17 to 2.67 |
+| 0.0 | 0.14 to 0.47 | 0.53 to 0.86 | **0.00** | -2.06 to 0.6 |
+
+`min_reach 0.00` means at least one fly is never touched for the whole run, and
+`braid 0.86` means the rest sit clumped at mid-range. Without neglect pulling
+the operator back toward what it has ignored, it settles on two flies and
+abandons the other three permanently.
+
+This was added on the user's suggestion, as "even neglect should escalate". It
+turns out to be the single parameter the piece cannot run without.
+
+### A third channel changes nothing
+
+`grip 2` and `grip 3` produce **byte-identical scores** at every other setting:
+2.377 against 2.377, 2.232 against 2.232, 2.166 against 2.166, and so on down
+the table.
+
+The expectation was that a third live channel would make the operator less
+frantic and let it keep more flies warm. It does not, because the switch margin
+decides when attention moves and the grip only decides how many slots exist for
+it to move between. Raising the ceiling on a resource that is not the
+bottleneck does nothing.
+
+So the two channel limit is not a constraint the piece is fighting against. It
+is not a constraint at all.
+
+### Best configuration
+
+`switch-margin 0.6, press-rate 3500, grip 2, debt-bias 1.1` at good 2.667,
+against 2.211 for the settings in use. The gain is almost entirely `min_reach`:
+0.44 against 0.205, so the least attended fly gets more than twice as much.

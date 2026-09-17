@@ -101,6 +101,9 @@ def main() -> int:
     ap.add_argument("--frames", type=int, default=180)
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--stills-only", action="store_true")
+    ap.add_argument("--window-ms", type=float, default=4000.0,
+                    help="length of the extra legible dial plot, for runs long "
+                         "enough that the full one is too dense to read")
     ap.add_argument("--animate", default="dials", choices=["dials", "traces"],
                     help="which figure the clip animates")
     ap.add_argument("--gif-width", type=int, default=720,
@@ -123,6 +126,20 @@ def main() -> int:
     fig = traces.dials(data["heat"], dt_ms=dt)
     traces.save(fig, args.out / "dials.png")
     log.info("wrote %s", args.out / "dials.png")
+
+    # A readable window as well as the whole run.
+    #
+    # A press takes about 350 ms, and a 30 s run across 1400 px is 21 ms per
+    # pixel, so a full stroke is 16 px wide and the five lines overlap into
+    # noise. The long plot still shows the shape of the run; this shows what
+    # the operator is actually doing.
+    win_ms = args.window_ms
+    if len(rates) * dt > win_ms * 1.5:
+        n = int(win_ms / dt)
+        fig = traces.dials(data["heat"][:n], dt_ms=dt)
+        out = args.out / f"dials_{int(win_ms / 1000)}s.png"
+        traces.save(fig, out)
+        log.info("wrote %s (first %.0f s, legible)", out, win_ms / 1000)
 
     ham = data.get("hamming")
     if ham is not None and len(ham):
