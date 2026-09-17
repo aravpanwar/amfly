@@ -2,7 +2,7 @@
 
 Skipped when CUDA is unavailable, so CI and CPU-only machines stay green.
 
-A GPU backend is only worth having if it keeps the property the whole piece
+A GPU backend has to keep the property the whole piece
 rests on. Speed that costs bit-identity is worse than no speed at all, because
 the six instances would decorrelate from arithmetic rather than from heat and
 the result would look like success.

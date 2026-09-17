@@ -10,10 +10,10 @@ atomic accumulation, and no spike-order dependence anywhere.
 
 We deliberately use the deterministic pull model even though it reads the whole
 matrix each step. project.md says "event-driven propagation is not optional".
-That was written for a realtime target and it is wrong here: a push kernel with
-atomics accumulates in non-deterministic order, which would decorrelate the six
-from floating-point noise alone and produce a convincing fake of the exact
-phenomenon this piece is about. Offline, we do not need the speed.
+That was written for a realtime target. A push kernel with atomics
+accumulates in non-deterministic order, so the six would decorrelate from
+floating-point noise instead of from stimulation. Offline we do not need the
+speed.
 """
 
 from __future__ import annotations
@@ -77,8 +77,7 @@ class Engine:
         """Advance one dt. Returns (N, n_instances) bool spike matrix.
 
         `injection` is (N, n_instances) added current in mV. This is the ONLY
-        way instances can differ, which is what makes chamber isolation provable
-        rather than asserted.
+        way instances can differ, so isolation follows from the structure.
         """
         lif = self.lif
 

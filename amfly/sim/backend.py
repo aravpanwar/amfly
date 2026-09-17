@@ -25,8 +25,8 @@ def describe() -> dict:
     """What is actually available, for the run manifest.
 
     Bit-identity is guaranteed within one machine and configuration. It is not
-    promised across different GPUs or torch versions, so the versions are
-    recorded rather than assumed.
+    promised across different GPUs or torch versions, so the versions go in the
+    run manifest.
     """
     info = {"backend": "numpy", "deterministic": True}
     try:

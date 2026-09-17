@@ -75,13 +75,14 @@ spikes. Chambers start identical and stay deterministic.
 There is no random seed in the pipeline at all. Even the recorded neuron sample
 is strided rather than drawn, and the dial breaks ties by lowest index.
 
-## No 3D, no physics engine, for now
+## Three.js, no physics engine
 
-`project.md` Phase 3 specifies flybody, Three.js and Rapier. Deferred entirely.
+`project.md` Phase 3 specifies flybody, Three.js and Rapier. The scene uses the
+flybody meshes and Three.js; Rapier and MuJoCo are not used.
 
-The deliverable is clips of traces decorrelating, and the trace panels are the
-piece. If the divergence does not read on a plot, no amount of rendering saves
-it. Bodies are a later concern if the project gets traction.
+The bodies are animated from recorded activity rather than simulated. Six
+MuJoCo instances at 0.2 ms steps would cost more than the connectome itself,
+and the motion is driven by measured motor-neuron firing either way.
 
 ## MIT, and our own loader
 

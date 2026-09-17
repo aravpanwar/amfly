@@ -76,8 +76,8 @@ python -m pytest tests/ -q -m "not slow"
 python scripts/run_sim.py --data data --ms 700 --out runs/001
 ```
 
-700ms is the minimum worth running, because the dial commits its decision 500ms
-ahead and a shorter run shows no movement at all.
+700ms is the minimum worth running. The stimulus commits its decision 500ms
+ahead, so a shorter run shows no movement at all.
 
 ## 5. Figures and clip
 
@@ -90,15 +90,15 @@ reported rather than silently skipped.
 
 ## What you should see
 
-With chamber 0 heated, measured on the full network:
+With fly 0 stimulated, measured on the full network:
 
 - Divergence begins around step 18, about 1.8ms, which is one synaptic delay
   after the stimulus arrives.
-- The heated chamber differs by a few hundred neurons per step.
-- The other four chambers and the operator stay bit-identical to each other for
+- The stimulated fly differs by a few hundred neurons per step.
+- The other four flies and the operator stay bit-identical to each other for
   the whole run, distance exactly 0.
 
-That last line is the one to check. If unheated chambers drift apart, something
+That last line is the one to check. If unstimulated flies drift apart, something
 is wrong: either determinism settings are off, or a non-deterministic reduction
 has crept in. It is not the piece working.
 
@@ -118,7 +118,7 @@ Full suite against the real connectome on an RTX 4050 laptop, CPU path:
 
 That includes the slow gates that load the 1.1GB dataset and run the full
 166,700-neuron network twice. Every count, determinism, isolation, divergence,
-dial, heat, metric and analysis gate green.
+stimulus, metric and analysis gate green.
 
 Machine: Windows 11, Python 3.11.4, numpy/scipy CPU path, torch 2.14.0+cpu.
 Step time drifted from 206ms to 250ms over a long run, which is thermal

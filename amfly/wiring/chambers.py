@@ -4,11 +4,10 @@ Heat is delivered as sustained depolarising current into the thermoreceptor
 neurons of exactly one chamber at a time, matching the sustained firing of fly
 warm cells above about 25C.
 
-The isolation property lives here and is enforced structurally: `injection()`
-writes into exactly one column of the (N, n_instances) matrix. The operator
-column is never written. There is no code path by which heating chamber 3 can
-touch chamber 1, which is what makes Gate 2 a real test rather than a hopeful
-assertion.
+Isolation is enforced structurally: `injection()` writes into exactly one
+column of the (N, n_instances) matrix, and the operator column is never
+written. There is no code path by which stimulating chamber 3 can touch
+chamber 1. Gate 2 tests this.
 
 Targets are TRN_VP* (25 bodies). There are no neurons of type "AC" in this
 dataset despite the literature naming anterior cell thermoreceptors, so an AC
@@ -142,10 +141,9 @@ class Electrode:
     integrates input and spikes and cannot be injured. See
     docs/what-heat-is.md.
 
-    What the simulation literally does is inject millivolts of depolarising
-    current. That was always the mechanism; heat was an interpretive layer on
-    top of it. Millivolts is the real unit, so an electrode is the more honest
-    description rather than the more lurid one.
+    What the simulation does is inject millivolts of depolarising current.
+    Millivolts is the unit it already worked in, so an electrode describes it
+    more accurately than heat did.
 
     Two things make this defensible where the heat channel was not:
 

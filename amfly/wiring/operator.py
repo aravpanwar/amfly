@@ -35,9 +35,8 @@ from ..config import CHAMBERS, DIAL_LATENCY_MS, OPERATOR
 class Dial:
     """Reads operator DN activity, points at a chamber, with a visible lag.
 
-    The latency is deliberate and authored. It is long enough that a viewer
-    learns to predict the chamber event from the spike burst before they
-    understand the mechanism, which is what makes the silences do work.
+    The latency is authored. It is long enough that a viewer can predict the
+    chamber event from the spike burst that precedes it.
     """
 
     dn_indices: np.ndarray

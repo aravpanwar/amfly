@@ -1,8 +1,7 @@
 """CUDA engine. Same arithmetic as the numpy engine, on the GPU.
 
-The whole project rests on six instances being bit-identical under identical
-input, so this backend is only worth having if it preserves that. Two settings
-make it safe and both are mandatory:
+Six instances must stay bit-identical under identical input, which this
+backend has to preserve. Two settings are required:
 
   - `torch.use_deterministic_algorithms(True)`, so no kernel picks a
     non-deterministic reduction.
