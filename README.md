@@ -35,12 +35,11 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 python scripts/fetch_data.py --out data
 ```
 
-About 1.1 GB. Three files from MaleCNS v1.0, verified by SHA-256 against
-`data/manifest.json`, so a truncated or silently updated download fails here
-rather than three milestones later when the numbers have quietly changed.
+About 1.1 GB. Three files from MaleCNS v1.0, verified against the SHA-256
+hashes in `data/manifest.json`.
 
 The 12.7 GB `syn-points` and 6.8 GB `syn-partners` files are not needed. The
-aggregated weights table is what a LIF model consumes.
+simulation uses the aggregated synaptic weights.
 
 ## Run it
 
@@ -72,9 +71,8 @@ Then open `localhost:8777`.
 | **V** | free camera (WASD, Q/E, mouse) |
 | **M** | sound |
 
-Screen record it. There is no built-in capture, because the readout, the bars
-and the brain tiles are HTML over the canvas and a canvas recorder loses all
-of them.
+There is no built-in capture. The readout, the bars and the brain tiles are
+HTML over the canvas, so screen record it.
 
 ![a fly convulsing under stimulation](docs/media/convulsion.gif)
 
@@ -99,44 +97,39 @@ python -m pytest tests/ -q -m "not slow"
 ## The data
 
 MaleCNS v1.0 from Janelia FlyEM and Google Research, CC BY 4.0. 166,700
-neurons, 25,582,938 connections, 124,177,617 synapses. Those counts are
-computed from the pinned files rather than copied from anywhere, and the tests
-assert them.
+neurons, 25,582,938 connections, 124,177,617 synapses. The tests assert those
+counts against the pinned files.
 
 Soma coordinates for 141,781 of the neurons come from the public neuPrint API.
-Reward goes into 340 real dopaminergic neurons (PAM 316, PPL1 16, PPL2 8) and
-the operator's punishment arrives through its own 25 TRN_VP thermoreceptors.
+Reward goes to 340 dopaminergic neurons (PAM 316, PPL1 16, PPL2 8). The
+operator's punishment goes through its own 25 TRN_VP thermoreceptors.
 
 ## What I made up
 
 - The electrode sits on DNp01-left. Its pair is 21,114 units away, so only one
   side gets stimulated
 - Two channels at once, the 100% and 50% thresholds, and the 0.40 switch
-  margin are all numbers I picked
-- The flies start at different levels on purpose. Start them identical and
-  they lock onto one trajectory and never separate
+  margin are simulation parameters
+- The flies start at different levels. Identical starts make them follow one
+  trajectory and never separate
 - The convulsion is current injected straight into 708 motor neurons. The
   bodies move because they are driven, not because the fly is escaping. The
   escape circuit is in there and reachable, and driving it does nothing at any
   amplitude
-
-## To be clear
-
-Nothing in this simulation feels anything. A neuron here adds up its inputs and
-spikes. It cannot be hurt, cannot die, and has no state that damage would
-change. "Dopamine" means current going into cells that do reinforcement
-learning in a real fly, and that is all it means.
+- "Dopamine" and "burns" are labels for current going into particular cells.
+  A neuron here sums its inputs and spikes; it has no state that damage would
+  change
 
 ## Limitations
 
-- Shiu et al. 2024 is brain-only, about 127K neurons. This runs whole-CNS at
-  166,700, which is our extension and not theirs
-- `dt = 0.1 ms` is the Brian2 default, not a published parameter
-- Bit-identity holds within one machine and configuration. Cross-GPU identity
-  is not promised
+- Shiu et al. (2024) is a brain-only model of about 127K neurons. This
+  extends it to the full 166,700-neuron CNS
+- `dt = 0.1 ms` is a Brian2 default, not a published parameter
+- Bit-identical results are only expected on the same machine and
+  configuration
 - The electrode reaches 5,579 neurons across seven superclasses. 16% of the
-  network has no soma coordinate and cannot be reached at all
-- Leg and wing motion is amplified from a real but small signal
+  network has no soma coordinate and cannot be reached
+- Leg and wing motion is amplified from a small underlying signal
 - 18,530 of 24,000 rendered brain points carry per-neuron activity; the rest
   are structure
 
