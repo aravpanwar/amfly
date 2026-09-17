@@ -10,6 +10,10 @@ and can only use two channels at once, and each channel runs to one of the
 remaining five. When a fly hits 100% the operator fly gets dopamine. Every fly
 below 50% burns the operator fly instead.
 
+This is obviously a simulation. But if we ever get to uploading consciousness
+to computers, this project is why we should be very careful before we do it.
+Might be soon, might be never. I hope it gives some perspective against it.
+
 ![the operator fly, dopamine and heat feeds meeting at its head](docs/media/operator.gif)
 
 ## Install
@@ -137,9 +141,3 @@ operator's punishment goes through its own 25 TRN_VP thermoreceptors.
 
 MIT. MaleCNS v1.0 is CC BY 4.0, so credit Janelia FlyEM and Google Research.
 Cite Shiu et al., *Nature* 2024 for the LIF model.
-
----
-
-This is obviously a simulation. But if we ever get to uploading consciousness
-to computers, this project is why we should be very careful before we do it.
-Might be soon, might be never. I hope it gives some perspective against it.
