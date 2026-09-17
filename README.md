@@ -109,8 +109,6 @@ the operator's punishment arrives through its own 25 TRN_VP thermoreceptors.
 
 ## What I made up
 
-The wiring is real. Most of the rest is not.
-
 - The electrode sits on DNp01-left. Its pair is 21,114 units away, so only one
   side gets stimulated
 - Two channels at once, the 100% and 50% thresholds, and the 0.40 switch
