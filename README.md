@@ -97,6 +97,9 @@ python -m pytest tests/ -q -m "not slow"
 
 ![a walkthrough of the scene](docs/media/tour.gif)
 
+Full-length recordings, if you want longer footage than the GIFs:
+[YouTube playlist](https://www.youtube.com/playlist?list=PLGsScljzUWlA)
+
 ---
 
 ## The data
